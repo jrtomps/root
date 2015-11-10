@@ -2513,7 +2513,7 @@ THistPainter::THistPainter()
 THistPainter::~THistPainter()
 {
    if (fImage) {
-	delete fImage;
+  delete fImage;
    }
 }
 
@@ -4686,6 +4686,45 @@ void THistPainter::PaintViolinPlot(Option_t *)
    delete [] quantiles;
 }
 
+void THistPainter::UpdatePalette(TImagePalette* palette) 
+{
+  Int_t nColors = gStyle->GetNumberOfColors();
+  Double_t step = 1./nColors;
+  Double_t* pPoints = new Double_t[nColors];
+  UShort_t* pRed    = new UShort_t[nColors];
+  UShort_t* pGreen  = new UShort_t[nColors];
+  UShort_t* pBlue   = new UShort_t[nColors];
+  UShort_t* pAlpha  = new UShort_t[nColors];
+
+  pPoints[0] = 0;
+  pRed[0]    = 0xff00;
+  pGreen[0]  = 0xff00;
+  pBlue[0]   = 0xff00;
+  pAlpha[0]  = 0xffff;
+
+  for (Int_t i=1; i<nColors; ++i) {
+    TColor* pColor = gROOT->GetColor(gStyle->GetColorPalette(i));
+    pPoints[i] = i*step; 
+    if (pColor) {
+      pRed[i] = UShort_t(pColor->GetRed()*255) << 8;
+      pGreen[i] = UShort_t(pColor->GetGreen()*255) << 8;
+      pBlue[i] = UShort_t(pColor->GetBlue()*255) << 8;
+    }
+    pAlpha[i] = 0xffff;
+  }
+
+  std::swap(pPoints, palette->fPoints);
+  std::swap(pRed, palette->fColorRed);
+  std::swap(pGreen, palette->fColorGreen);
+  std::swap(pBlue, palette->fColorBlue);
+  std::swap(pAlpha, palette->fColorAlpha);
+
+//  delete pPoints;
+//  delete pRed;
+//  delete pGreen;
+//  delete pBlue;
+}
+
 std::vector<THistRenderingRegion> 
 THistPainter::computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog)
 {
@@ -4798,7 +4837,7 @@ THistPainter::computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog)
 
 void THistPainter::PaintColorLevelsCartesian(Option_t*)
 {
-
+//   UpdatePalette(gHistImagePalette);
 //  Benchmark<2, std::chrono::high_resolution_clock> bm;
 //   std::cout << "Painting Color Levels Cartesian" << std::endl;
    /* Begin_html
@@ -4848,7 +4887,6 @@ void THistPainter::PaintColorLevelsCartesian(Option_t*)
    Int_t nYPixels = py0-py1; // y=0 is at the top of the screen
 
    std::vector<double> buffer(nXPixels*nYPixels, 0);
-   TProfile2D* prof2d = dynamic_cast<TProfile2D*>(fH);
 
 //   TAxis* fXaxis = fH->GetXaxis();
 //   TAxis* fYaxis = fH->GetYaxis();
@@ -4893,12 +4931,14 @@ void THistPainter::PaintColorLevelsCartesian(Option_t*)
 
    if (!fImage) {
         fImage = TImage::Create();
-	fImage->SetImageQuality(TAttImage::kImgBest);
+  fImage->SetImageQuality(TAttImage::kImgBest);
    }
-   fImage->SetImage(buffer.data(), nXPixels, nYPixels);//, myPalette);
+   fImage->SetImage(buffer.data(), nXPixels, nYPixels, gHistImagePalette);
 
    Window_t wid = static_cast<Window_t>(gVirtualX->GetWindowID(gPad->GetPixmapID()));
    fImage->PaintImage(wid, px0, py1, 0, 0, nXPixels, nYPixels);
+
+   if (Hoption.Zscale) PaintPalette();
 
 }
 
@@ -5046,11 +5086,11 @@ void THistPainter::PaintColorLevelsPolar(Option_t*)
 
 void THistPainter::PaintColorLevels(Option_t *opt)
 {
-	if (Hoption.System == kPOLAR) {
-		PaintColorLevelsPolar(opt);
-	} else {
-		PaintColorLevelsCartesian(opt);
-	}
+   if (Hoption.System == kPOLAR) {
+      PaintColorLevelsPolar(opt);
+   } else {
+      PaintColorLevelsCartesian(opt);
+   }
 }
 
 

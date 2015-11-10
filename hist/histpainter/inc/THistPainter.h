@@ -40,12 +40,13 @@ class TPainter3dAlgorithms;
 class TGraph2DPainter;
 class TPie;
 class TImage;
+class TImagePalette;
 const Int_t kMaxCuts = 16;
 
 struct THistRenderingRegion 
 {
-	std::pair<Int_t, Int_t> fPixelRange;
-	std::pair<Int_t, Int_t> fBinRange;
+   std::pair<Int_t, Int_t> fPixelRange;
+   std::pair<Int_t, Int_t> fBinRange;
 };
 
 
@@ -95,7 +96,8 @@ public:
    virtual void       PaintColorLevels(Option_t *option);
    virtual void       PaintColorLevelsCartesian(Option_t *option);
    virtual void       PaintColorLevelsPolar(Option_t *option);
-   virtual std::vector<THistRenderingRegion> computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog);
+   virtual void       UpdatePalette(TImagePalette *pPalette);
+   virtual std::vector<THistRenderingRegion> computeRenderingRegions(TAxis *pAxis, Int_t nPixels, bool isLog);
 
    virtual void       PaintTH2PolyBins(Option_t *option);
    virtual void       PaintTH2PolyColorLevels(Option_t *option);
