@@ -42,7 +42,7 @@ class TPie;
 class TImage;
 const Int_t kMaxCuts = 16;
 
-class THistRenderingRegion 
+struct THistRenderingRegion 
 {
 	std::pair<Int_t, Int_t> fPixelRange;
 	std::pair<Int_t, Int_t> fBinRange;

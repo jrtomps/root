@@ -4898,7 +4898,7 @@ void THistPainter::PaintColorLevelsCartesian(Option_t*)
    fImage->SetImage(buffer.data(), nXPixels, nYPixels);//, myPalette);
 
    Window_t wid = static_cast<Window_t>(gVirtualX->GetWindowID(gPad->GetPixmapID()));
-   fImage->PaintImage(wid, px0, py0, 0, 0, nXPixels, nYPixels);
+   fImage->PaintImage(wid, px0, py1, 0, 0, nXPixels, nYPixels);
 
 }
 
