@@ -3163,6 +3163,7 @@ Int_t THistPainter::MakeChopt(Option_t *choptin)
    Hoption.Logy = Hoption.Logz   = Hoption.Lego    = Hoption.Surf    = 0;
    Hoption.Off  = Hoption.Tri    = Hoption.Proj    = Hoption.AxisPos = 0;
    Hoption.Spec = Hoption.Pie    = Hoption.Candle  = Hoption.Violin  = 0;
+   Hoption.Fast = 0;
 
    //    special 2D options
    Hoption.List     = 0;
@@ -3378,6 +3379,7 @@ Int_t THistPainter::MakeChopt(Option_t *choptin)
          Hoption.Hist = 1;
       }
    }
+   l = strstr(chopt,"FAST"); if (l) { Hoption.Fast   = 1; strncpy(l,"    ",4); }
    l = strstr(chopt,"CHAR"); if (l) { Hoption.Char   = 1; strncpy(l,"    ",4); Hoption.Scat = 0; }
    l = strstr(chopt,"FUNC"); if (l) { Hoption.Func   = 2; strncpy(l,"    ",4); Hoption.Hist = 0; }
    l = strstr(chopt,"HIST"); if (l) { Hoption.Hist   = 2; strncpy(l,"    ",4); Hoption.Func = 0; Hoption.Error = 0;}
@@ -4835,15 +4837,13 @@ THistPainter::computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog)
   return regions;
 }
 
-void THistPainter::PaintColorLevelsCartesian(Option_t*)
+void THistPainter::PaintColorLevelsFast(Option_t*)
 {
-//   UpdatePalette(gHistImagePalette);
-//  Benchmark<2, std::chrono::high_resolution_clock> bm;
-//   std::cout << "Painting Color Levels Cartesian" << std::endl;
    /* Begin_html
-   [Control function to draw a 2D histogram as a color plot.](#HP14)
+   [Control function to draw a 2D histogram as a color plot fast.](#HP14)
    End_html */
 
+//   UpdatePalette(gHistImagePalette);
    Double_t z; 
 
    Double_t zmin = fH->GetMinimum();
@@ -4888,12 +4888,8 @@ void THistPainter::PaintColorLevelsCartesian(Option_t*)
 
    std::vector<double> buffer(nXPixels*nYPixels, 0);
 
-//   TAxis* fXaxis = fH->GetXaxis();
-//   TAxis* fYaxis = fH->GetYaxis();
    auto xRegions = computeRenderingRegions(fXaxis, nXPixels, Hoption.Logx);
-//   std::copy(xRegions.begin(), xRegions.end(), std::ostream_iterator<THistRenderingRegion>(std::cout, "\n"));
    auto yRegions = computeRenderingRegions(fYaxis, nYPixels, Hoption.Logy);
-//   std::copy(yRegions.begin(), yRegions.end(), std::ostream_iterator<THistRenderingRegion>(std::cout, "\n"));
 
    for (auto& yRegion : yRegions) {
      for (auto& xRegion : xRegions ) {
@@ -4930,8 +4926,8 @@ void THistPainter::PaintColorLevelsCartesian(Option_t*)
    } // end py loop
 
    if (!fImage) {
-        fImage = TImage::Create();
-  fImage->SetImageQuality(TAttImage::kImgBest);
+      fImage = TImage::Create();
+      fImage->SetImageQuality(TAttImage::kImgBest);
    }
    fImage->SetImage(buffer.data(), nXPixels, nYPixels, gHistImagePalette);
 
@@ -4942,7 +4938,7 @@ void THistPainter::PaintColorLevelsCartesian(Option_t*)
 
 }
 
-void THistPainter::PaintColorLevelsPolar(Option_t*)
+void THistPainter::PaintColorLevels(Option_t*)
 {
    /* Begin_html
    [Control function to draw a 2D histogram as a color plot.](#HP14)
@@ -5084,12 +5080,14 @@ void THistPainter::PaintColorLevelsPolar(Option_t*)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void THistPainter::PaintColorLevels(Option_t *opt)
+void THistPainter::PaintColorLevelsDispatch(Option_t *opt)
 {
-   if (Hoption.System == kPOLAR) {
-      PaintColorLevelsPolar(opt);
+   if (Hoption.Fast && Hoption.System!=kPOLAR) {
+      if (dynamic_cast<TProfile2D*>(fH) == nullptr) {
+         PaintColorLevelsFast(opt);
+      }
    } else {
-      PaintColorLevelsCartesian(opt);
+      PaintColorLevels(opt);
    }
 }
 
@@ -8438,7 +8436,7 @@ void THistPainter::PaintTable(Option_t *option)
          if (Hoption.Scat)         PaintScatterPlot(option);
          if (Hoption.Arrow)        PaintArrows(option);
          if (Hoption.Box)          PaintBoxes(option);
-         if (Hoption.Color)        PaintColorLevels(option);
+         if (Hoption.Color)        PaintColorLevelsDispatch(option);
          if (Hoption.Contour)      PaintContour(option);
          if (Hoption.Text)         PaintText(option);
          if (Hoption.Error >= 100) Paint2DErrors(option);

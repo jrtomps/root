@@ -93,9 +93,9 @@ public:
    virtual void       PaintBoxes(Option_t *option);
    virtual void       PaintCandlePlot(Option_t *option);
    virtual void       PaintViolinPlot(Option_t *option);
+   virtual void       PaintColorLevelsDispatch(Option_t *option);
    virtual void       PaintColorLevels(Option_t *option);
-   virtual void       PaintColorLevelsCartesian(Option_t *option);
-   virtual void       PaintColorLevelsPolar(Option_t *option);
+   virtual void       PaintColorLevelsFast(Option_t *option);
    virtual void       UpdatePalette(TImagePalette *pPalette);
    virtual std::vector<THistRenderingRegion> computeRenderingRegions(TAxis *pAxis, Int_t nPixels, bool isLog);
 
