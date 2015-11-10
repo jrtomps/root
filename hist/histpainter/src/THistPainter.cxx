@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <stdexcept>
 
 #include "Riostream.h"
 #include "TROOT.h"
@@ -62,6 +63,7 @@
 #include "TVirtualPadEditor.h"
 #include "TEnv.h"
 #include "TPoint.h"
+#include "TImage.h"
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2475,6 +2477,7 @@ THistPainter::THistPainter()
    fGraph2DPainter = 0;
    fShowProjection = 0;
    fShowOption = "";
+   fImage = 0;
    for (int i=0; i<kMaxCuts; i++) {
       fCuts[i] = 0;
       fCutsOpt[i] = 0;
@@ -2509,6 +2512,9 @@ THistPainter::THistPainter()
 
 THistPainter::~THistPainter()
 {
+   if (fImage) {
+	delete fImage;
+   }
 }
 
 
@@ -4680,9 +4686,223 @@ void THistPainter::PaintViolinPlot(Option_t *)
    delete [] quantiles;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+std::vector<THistRenderingRegion> 
+THistPainter::computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog)
+{
+//  Benchmark<1, std::chrono::high_resolution_clock> bm;
+  std::vector<THistRenderingRegion> regions;
 
-void THistPainter::PaintColorLevels(Option_t *)
+  enum STRATEGY { Bins, Pixels } strategy;
+
+  Int_t nBins = (pAxis->GetLast() - pAxis->GetFirst() + 1);
+
+  if (nBins >= nPixels) {
+    // more bins than pixels... we should loop over pixels and sample
+    strategy = Pixels;
+  } else {
+    // fewer bins than pixels... we should loop over bins
+    strategy = Bins;
+  }
+
+  if (isLog) {
+
+ //   std::cout << "Choosing Log" << std::endl;
+    Double_t xMin = pAxis->GetBinLowEdge(pAxis->GetFirst());
+    Int_t binOffset=0;
+    while (xMin <= 0 && ((pAxis->GetFirst()+binOffset) != pAxis->GetLast()) ) {
+      binOffset++;
+      xMin = pAxis->GetBinLowEdge(pAxis->GetFirst()+binOffset);
+    }
+    if (xMin <= 0) {
+    // this should cause an error if we have
+      throw std::runtime_error("Can not plot a negative axis region using log");
+    }
+    Double_t xMax = pAxis->GetBinUpEdge(pAxis->GetLast());
+
+    if (strategy == Bins) {
+//      std::cout << "\tLooping over bins" << std::endl;
+      // log plot. we find the pixel for the bin
+      // pixel = eta * log10(V) - alpha
+      //  where eta = nPixels/(log10(Vmax)-log10(Vmin))
+      //  and alpha = nPixels*log10(Vmin)/(log10(Vmax)-log10(Vmin))
+      // and V is axis value
+      Double_t eta = (nPixels-1.0)/(TMath::Log10(xMax) - TMath::Log10(xMin));
+      Double_t offset = -1.0 * eta * TMath::Log10(xMin);
+
+      for (Int_t bin=pAxis->GetFirst()+binOffset; bin<=pAxis->GetLast(); bin++) {
+          
+        // linear plot. we simply need to find the appropriate bin
+        // for the 
+        Double_t xLowValue = pAxis->GetBinLowEdge(bin);
+        Double_t xUpValue  = pAxis->GetBinUpEdge(bin);
+        Int_t xPx0     = eta*TMath::Log10(xLowValue)+ offset;
+        Int_t xPx1     = eta*TMath::Log10(xUpValue) + offset;
+        THistRenderingRegion region;
+        region.fPixelRange  = std::make_pair(xPx0, xPx1);
+        region.fBinRange    = std::make_pair(bin, bin+1);
+        regions.push_back(region);
+      }
+
+    } else {
+
+//      std::cout << "\tLooping over pixels" << std::endl;
+      // loop over pixels
+      
+      Double_t beta = (TMath::Log10(xMax) - TMath::Log10(xMin))/(nPixels-1.0);
+
+      for (Int_t pixelIndex=0; pixelIndex<(nPixels-1); pixelIndex++) {
+        // linear plot
+        Int_t binLow  = pAxis->FindBin(xMin*TMath::Power(10.0, beta*pixelIndex));
+        Int_t binHigh = pAxis->FindBin(xMin*TMath::Power(10.0, beta*(pixelIndex+1)));
+        THistRenderingRegion region;
+        region.fPixelRange  = std::make_pair(pixelIndex, pixelIndex+1);
+        region.fBinRange    = std::make_pair(binLow, binHigh);
+        regions.push_back(region);
+      }
+    }
+  } else {
+    // standard linear plot
+//      std::cout << "Plotting linear" << std::endl;
+    
+    if (strategy == Bins) {
+//      std::cout << "\tLooping over bins" << std::endl;
+      // loop over bins
+      for (Int_t bin=pAxis->GetFirst(); bin<=pAxis->GetLast(); bin++) {
+          
+        // linear plot. we simply need to find the appropriate bin
+        // for the 
+        Int_t xPx0     = ((bin - pAxis->GetFirst()) * nPixels)/nBins;
+        Int_t xPx1     = xPx0 + nPixels/nBins;
+        THistRenderingRegion region;
+        region.fPixelRange  = std::make_pair(xPx0, xPx1);
+        region.fBinRange    = std::make_pair(bin, bin+1);
+        regions.push_back(region);
+      }
+    } else {
+//      std::cout << "\tLooping over pixels" << std::endl;
+      // loop over pixels
+      for (Int_t pixelIndex=0; pixelIndex<nPixels-1; pixelIndex++) {
+        // linear plot
+        Int_t binLow  = (nBins*pixelIndex)/nPixels + pAxis->GetFirst();
+        Int_t binHigh = binLow + nBins/nPixels;
+        THistRenderingRegion region;
+        region.fPixelRange  = std::make_pair(pixelIndex, pixelIndex+1);
+        region.fBinRange    = std::make_pair(binLow, binHigh);
+        regions.push_back(region);
+      }
+    }
+  }
+
+  return regions;
+}
+
+void THistPainter::PaintColorLevelsCartesian(Option_t*)
+{
+
+//  Benchmark<2, std::chrono::high_resolution_clock> bm;
+//   std::cout << "Painting Color Levels Cartesian" << std::endl;
+   /* Begin_html
+   [Control function to draw a 2D histogram as a color plot.](#HP14)
+   End_html */
+
+   Double_t z; 
+
+   Double_t zmin = fH->GetMinimum();
+   Double_t zmax = fH->GetMaximum();
+//   std::cout << "zmin = " << zmin << std::endl;
+//   std::cout << "zmax = " << zmax << std::endl;
+
+   Double_t dz = zmax - zmin;
+   if (dz <= 0) { // Histogram filled with a constant value
+      zmax += 0.1*TMath::Abs(zmax);
+      zmin -= 0.1*TMath::Abs(zmin);
+      dz = zmax - zmin;
+   }
+
+   if (Hoption.Logz) {
+      if (zmin > 0) {
+         zmin = TMath::Log10(zmin);
+         zmax = TMath::Log10(zmax);
+         dz = zmax - zmin;
+      } else {
+         return;
+      }
+   }
+ //  std::cout << "dz = " << dz << std::endl;
+
+   // Initialize the levels on the Z axis
+   Int_t ndiv   = fH->GetContour();
+   if (ndiv == 0 ) {
+      ndiv = gStyle->GetNumberContours();
+      fH->SetContour(ndiv);
+   }
+   if (fH->TestBit(TH1::kUserContour) == 0) fH->SetContour(ndiv);
+
+
+   auto pFrame = gPad->GetFrame();
+   Int_t px0 = gPad->XtoPixel(pFrame->GetX1());
+   Int_t px1 = gPad->XtoPixel(pFrame->GetX2());
+   Int_t py0 = gPad->YtoPixel(pFrame->GetY1());
+   Int_t py1 = gPad->YtoPixel(pFrame->GetY2());
+   Int_t nXPixels = px1-px0;
+   Int_t nYPixels = py0-py1; // y=0 is at the top of the screen
+
+   std::vector<double> buffer(nXPixels*nYPixels, 0);
+   TProfile2D* prof2d = dynamic_cast<TProfile2D*>(fH);
+
+//   TAxis* fXaxis = fH->GetXaxis();
+//   TAxis* fYaxis = fH->GetYaxis();
+   auto xRegions = computeRenderingRegions(fXaxis, nXPixels, Hoption.Logx);
+//   std::copy(xRegions.begin(), xRegions.end(), std::ostream_iterator<THistRenderingRegion>(std::cout, "\n"));
+   auto yRegions = computeRenderingRegions(fYaxis, nYPixels, Hoption.Logy);
+//   std::copy(yRegions.begin(), yRegions.end(), std::ostream_iterator<THistRenderingRegion>(std::cout, "\n"));
+
+   for (auto& yRegion : yRegions) {
+     for (auto& xRegion : xRegions ) {
+
+       const auto& xBinRange = xRegion.fBinRange;
+       const auto& yBinRange = yRegion.fBinRange;
+
+       // sample the range
+       Double_t currentMax = fH->GetBinContent(xBinRange.first, yBinRange.first);
+   //    cout << xBinRange.first << ", " << yBinRange.first << " : " << currentMax << endl;
+   //    for (Int_t xbin = xBinRange.first+1; xbin<xBinRange.second; ++xbin) {
+   //      for (Int_t ybin = yBinRange.first+1; ybin<yBinRange.second; ++ybin) {
+   //        Double_t value = fH->GetBinContent(xbin, ybin);
+   //        cout << xbin << ", " << ybin << " : " << value << endl;
+   //        if (value > currentMax) currentMax = value;
+   //      }
+   //    }
+       z = currentMax;
+
+       if (Hoption.Logz) {
+         if (z > 0) z = TMath::Log10(z);
+         else       z = zmin;
+       }
+
+       const auto& xPixelRange = xRegion.fPixelRange;
+       const auto& yPixelRange = yRegion.fPixelRange;
+       for (Int_t xPx = xPixelRange.first; xPx <= xPixelRange.second; ++xPx) {
+         for (Int_t yPx = yPixelRange.first; yPx <= yPixelRange.second; ++yPx) {
+           Int_t pixel = yPx*nXPixels + xPx;
+           buffer.at(pixel) = z;
+         }
+       }
+     } // end px loop
+   } // end py loop
+
+   if (!fImage) {
+        fImage = TImage::Create();
+	fImage->SetImageQuality(TAttImage::kImgBest);
+   }
+   fImage->SetImage(buffer.data(), nXPixels, nYPixels);//, myPalette);
+
+   Window_t wid = static_cast<Window_t>(gVirtualX->GetWindowID(gPad->GetPixmapID()));
+   fImage->PaintImage(wid, px0, py0, 0, 0, nXPixels, nYPixels);
+
+}
+
+void THistPainter::PaintColorLevelsPolar(Option_t*)
 {
    /* Begin_html
    [Control function to draw a 2D histogram as a color plot.](#HP14)
@@ -4820,6 +5040,17 @@ void THistPainter::PaintColorLevels(Option_t *)
    fH->SetFillColor(colsav);
    fH->TAttFill::Modify();
 
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void THistPainter::PaintColorLevels(Option_t *opt)
+{
+	if (Hoption.System == kPOLAR) {
+		PaintColorLevelsPolar(opt);
+	} else {
+		PaintColorLevelsCartesian(opt);
+	}
 }
 
 

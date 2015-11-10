@@ -28,6 +28,9 @@
 #include "TString.h"
 #endif
 
+#include <vector>
+#include <utility>
+
 
 class TH1;
 class TAxis;
@@ -36,7 +39,15 @@ class TGaxis;
 class TPainter3dAlgorithms;
 class TGraph2DPainter;
 class TPie;
+class TImage;
 const Int_t kMaxCuts = 16;
+
+class THistRenderingRegion 
+{
+	std::pair<Int_t, Int_t> fPixelRange;
+	std::pair<Int_t, Int_t> fBinRange;
+};
+
 
 class THistPainter : public TVirtualHistPainter {
 
@@ -57,6 +68,7 @@ protected:
    TList                *fStack;             //Pointer to stack of histograms (if any)
    Int_t                 fShowProjection;    //True if a projection must be drawn
    TString               fShowOption;        //Option to draw the projection
+   TImage		*fImage;             //Image to render cartesian "col" into
 
 public:
    THistPainter();
@@ -81,6 +93,10 @@ public:
    virtual void       PaintCandlePlot(Option_t *option);
    virtual void       PaintViolinPlot(Option_t *option);
    virtual void       PaintColorLevels(Option_t *option);
+   virtual void       PaintColorLevelsCartesian(Option_t *option);
+   virtual void       PaintColorLevelsPolar(Option_t *option);
+   virtual std::vector<THistRenderingRegion> computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog);
+
    virtual void       PaintTH2PolyBins(Option_t *option);
    virtual void       PaintTH2PolyColorLevels(Option_t *option);
    virtual void       PaintTH2PolyScatterPlot(Option_t *option);
