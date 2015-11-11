@@ -2513,7 +2513,7 @@ THistPainter::THistPainter()
 THistPainter::~THistPainter()
 {
    if (fImage) {
-  delete fImage;
+      delete fImage;
    }
 }
 
@@ -4721,10 +4721,21 @@ void THistPainter::UpdatePalette(TImagePalette* palette)
   std::swap(pBlue, palette->fColorBlue);
   std::swap(pAlpha, palette->fColorAlpha);
 
-//  delete pPoints;
-//  delete pRed;
-//  delete pGreen;
-//  delete pBlue;
+/*
+  // NOTE: we need to make the following code possible to avoid a memory leak.
+  //       The gDefHist* are all static to the TAttImage.cxx file.I think that 
+  //        we can expose these for the sake of avoiding a memory leak.
+
+  // the default gHistImagePalette is defined in terms of stack
+  // allocated arrays that cannot be deleted. So only free our memory
+  // if the gHistImagePalette was using something other than the 
+  // default
+  if (pPoints != gDefHistP) delete [] pPoints;
+  if (pRed    != gDefHistR) delete [] pPoints;
+  if (pGreen  != gDefHistG) delete [] pPoints;
+  if (pBlue   != gDefHistB) delete [] pPoints;
+  if (pAlpha  != gDefHistA) delete [] pPoints;
+*/
 }
 
 std::vector<THistRenderingRegion> 
@@ -4843,7 +4854,7 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
    [Control function to draw a 2D histogram as a color plot fast.](#HP14)
    End_html */
 
-//   UpdatePalette(gHistImagePalette);
+   UpdatePalette(gHistImagePalette);
    Double_t z; 
 
    Double_t zmin = fH->GetMinimum();
