@@ -60,7 +60,6 @@ typedef struct Hoption_t {
    int AxisPos;     ///<  Axis position
    int Spec;        ///< TSpectrum graphics
    int Zero;        ///< if selected with any LEGO option the empty bins are not drawn.
-   int Fast;        ///< "FAST" Draw 2D color plot with limited color options but fast
 
    // The following structure members are set to 1 if the corresponding option
    // in the current style is selected.

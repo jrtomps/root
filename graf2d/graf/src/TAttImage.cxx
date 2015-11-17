@@ -86,6 +86,7 @@ This class provides a way to edit the palette via a GUI.
 #include "Riostream.h"
 #include "TColor.h"
 #include "TMath.h"
+#include "TStyle.h"
 
 
 ClassImp(TPaletteEditor)
@@ -672,6 +673,36 @@ void TAttImage::SetPalette(const TImagePalette *palette)
       fPalette.fPoints[0] = 0;
       fPalette.fPoints[kNUM_DEFAULT_COLORS - 1] = 1;
    }
+}
+
+
+TImagePalette* TImagePalette::Create(Option_t* opts)
+{
+   TImagePalette* pPalette = nullptr;
+
+   TString option(opts);
+   if (option.Contains("col", TString::kIgnoreCase)) {
+      // Define the new palette using the current palette in TStyle
+      pPalette = new TImagePalette(gStyle->GetNumberOfColors());
+      Double_t step = 1./(pPalette->fNumPoints-1);
+
+      for (UInt_t i=0; i<pPalette->fNumPoints; ++i) {
+         TColor* pColor = gROOT->GetColor(gStyle->GetColorPalette(i));
+         pPalette->fPoints[i] = i*step; 
+         if (pColor) {
+            pPalette->fColorRed[i] = UShort_t(pColor->GetRed()*255) << 8;
+            pPalette->fColorGreen[i] = UShort_t(pColor->GetGreen()*255) << 8;
+            pPalette->fColorBlue[i] = UShort_t(pColor->GetBlue()*255) << 8;
+         }
+         pPalette->fColorAlpha[i] = 0xff00;
+      }
+   } else if (option.Contains("web", TString::kIgnoreCase)) {
+      pPalette = new TDefHistImagePalette();
+   } else if (option.Contains("hist", TString::kIgnoreCase)) {
+      pPalette = new TWebPalette();
+   }
+
+   return pPalette;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

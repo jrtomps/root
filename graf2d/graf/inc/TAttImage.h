@@ -100,7 +100,9 @@ public:
 
    TImagePalette &operator=(const TImagePalette &palette);
 
-   ClassDef(TImagePalette,1)  // Color Palette for value -> color conversion
+   static TImagePalette* Create(Option_t* opts);
+
+   ClassDef(TImagePalette,2)  // Color Palette for value -> color conversion
 };
 
 

@@ -13,7 +13,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <stdexcept>
+#include <iostream>
 
 #include "Riostream.h"
 #include "TROOT.h"
@@ -2477,7 +2477,6 @@ THistPainter::THistPainter()
    fGraph2DPainter = 0;
    fShowProjection = 0;
    fShowOption = "";
-   fImage = 0;
    for (int i=0; i<kMaxCuts; i++) {
       fCuts[i] = 0;
       fCutsOpt[i] = 0;
@@ -2512,9 +2511,6 @@ THistPainter::THistPainter()
 
 THistPainter::~THistPainter()
 {
-   if (fImage) {
-      delete fImage;
-   }
 }
 
 
@@ -3163,7 +3159,6 @@ Int_t THistPainter::MakeChopt(Option_t *choptin)
    Hoption.Logy = Hoption.Logz   = Hoption.Lego    = Hoption.Surf    = 0;
    Hoption.Off  = Hoption.Tri    = Hoption.Proj    = Hoption.AxisPos = 0;
    Hoption.Spec = Hoption.Pie    = Hoption.Candle  = Hoption.Violin  = 0;
-   Hoption.Fast = 0;
 
    //    special 2D options
    Hoption.List     = 0;
@@ -3361,6 +3356,7 @@ Int_t THistPainter::MakeChopt(Option_t *choptin)
          Hoption.Color  = 1;
          Hoption.Scat   = 0;
          Hoption.Zscale = 1;
+         if (l[4] == '2') { Hoption.Color = 3; l[4] = ' '; }
          l = strstr(chopt,"0");  if (l) { Hoption.Zero  = 1;  strncpy(l," ",1); }
          l = strstr(chopt,"1");  if (l) { Hoption.Color = 2;  strncpy(l," ",1); }
       } else {
@@ -3373,13 +3369,13 @@ Int_t THistPainter::MakeChopt(Option_t *choptin)
       if (hdim>1) {
          Hoption.Color = 1;
          Hoption.Scat  = 0;
+         if (l[3] == '2') { Hoption.Color = 3; l[3] = ' '; }
          l = strstr(chopt,"0");  if (l) { Hoption.Zero  = 1;  strncpy(l," ",1); }
          l = strstr(chopt,"1");  if (l) { Hoption.Color = 2;  strncpy(l," ",1); }
       } else {
          Hoption.Hist = 1;
       }
    }
-   l = strstr(chopt,"FAST"); if (l) { Hoption.Fast   = 1; strncpy(l,"    ",4); }
    l = strstr(chopt,"CHAR"); if (l) { Hoption.Char   = 1; strncpy(l,"    ",4); Hoption.Scat = 0; }
    l = strstr(chopt,"FUNC"); if (l) { Hoption.Func   = 2; strncpy(l,"    ",4); Hoption.Hist = 0; }
    l = strstr(chopt,"HIST"); if (l) { Hoption.Hist   = 2; strncpy(l,"    ",4); Hoption.Func = 0; Hoption.Error = 0;}
@@ -4688,164 +4684,109 @@ void THistPainter::PaintViolinPlot(Option_t *)
    delete [] quantiles;
 }
 
-void THistPainter::UpdatePalette(TImagePalette* palette) 
-{
-  Int_t nColors = gStyle->GetNumberOfColors();
-  Double_t step = 1./nColors;
-  Double_t* pPoints = new Double_t[nColors];
-  UShort_t* pRed    = new UShort_t[nColors];
-  UShort_t* pGreen  = new UShort_t[nColors];
-  UShort_t* pBlue   = new UShort_t[nColors];
-  UShort_t* pAlpha  = new UShort_t[nColors];
-
-  pPoints[0] = 0;
-  pRed[0]    = 0xff00;
-  pGreen[0]  = 0xff00;
-  pBlue[0]   = 0xff00;
-  pAlpha[0]  = 0xffff;
-
-  for (Int_t i=1; i<nColors; ++i) {
-    TColor* pColor = gROOT->GetColor(gStyle->GetColorPalette(i));
-    pPoints[i] = i*step; 
-    if (pColor) {
-      pRed[i] = UShort_t(pColor->GetRed()*255) << 8;
-      pGreen[i] = UShort_t(pColor->GetGreen()*255) << 8;
-      pBlue[i] = UShort_t(pColor->GetBlue()*255) << 8;
-    }
-    pAlpha[i] = 0xffff;
-  }
-
-  std::swap(pPoints, palette->fPoints);
-  std::swap(pRed, palette->fColorRed);
-  std::swap(pGreen, palette->fColorGreen);
-  std::swap(pBlue, palette->fColorBlue);
-  std::swap(pAlpha, palette->fColorAlpha);
-
-/*
-  // NOTE: we need to make the following code possible to avoid a memory leak.
-  //       The gDefHist* are all static to the TAttImage.cxx file.I think that 
-  //        we can expose these for the sake of avoiding a memory leak.
-
-  // the default gHistImagePalette is defined in terms of stack
-  // allocated arrays that cannot be deleted. So only free our memory
-  // if the gHistImagePalette was using something other than the 
-  // default
-  if (pPoints != gDefHistP) delete [] pPoints;
-  if (pRed    != gDefHistR) delete [] pPoints;
-  if (pGreen  != gDefHistG) delete [] pPoints;
-  if (pBlue   != gDefHistB) delete [] pPoints;
-  if (pAlpha  != gDefHistA) delete [] pPoints;
-*/
-}
 
 std::vector<THistRenderingRegion> 
 THistPainter::computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog)
 {
-//  Benchmark<1, std::chrono::high_resolution_clock> bm;
-  std::vector<THistRenderingRegion> regions;
+   //  Benchmark<1, std::chrono::high_resolution_clock> bm;
+   std::vector<THistRenderingRegion> regions;
 
-  enum STRATEGY { Bins, Pixels } strategy;
+   enum STRATEGY { Bins, Pixels } strategy;
 
-  Int_t nBins = (pAxis->GetLast() - pAxis->GetFirst() + 1);
+   Int_t nBins = (pAxis->GetLast() - pAxis->GetFirst() + 1);
 
-  if (nBins >= nPixels) {
-    // more bins than pixels... we should loop over pixels and sample
-    strategy = Pixels;
-  } else {
-    // fewer bins than pixels... we should loop over bins
-    strategy = Bins;
-  }
+   if (nBins >= nPixels) {
+      // more bins than pixels... we should loop over pixels and sample
+      strategy = Pixels;
+   } else {
+      // fewer bins than pixels... we should loop over bins
+      strategy = Bins;
+   }
 
-  if (isLog) {
+   if (isLog) {
 
- //   std::cout << "Choosing Log" << std::endl;
-    Double_t xMin = pAxis->GetBinLowEdge(pAxis->GetFirst());
-    Int_t binOffset=0;
-    while (xMin <= 0 && ((pAxis->GetFirst()+binOffset) != pAxis->GetLast()) ) {
-      binOffset++;
-      xMin = pAxis->GetBinLowEdge(pAxis->GetFirst()+binOffset);
-    }
-    if (xMin <= 0) {
-    // this should cause an error if we have
-      throw std::runtime_error("Can not plot a negative axis region using log");
-    }
-    Double_t xMax = pAxis->GetBinUpEdge(pAxis->GetLast());
-
-    if (strategy == Bins) {
-//      std::cout << "\tLooping over bins" << std::endl;
-      // log plot. we find the pixel for the bin
-      // pixel = eta * log10(V) - alpha
-      //  where eta = nPixels/(log10(Vmax)-log10(Vmin))
-      //  and alpha = nPixels*log10(Vmin)/(log10(Vmax)-log10(Vmin))
-      // and V is axis value
-      Double_t eta = (nPixels-1.0)/(TMath::Log10(xMax) - TMath::Log10(xMin));
-      Double_t offset = -1.0 * eta * TMath::Log10(xMin);
-
-      for (Int_t bin=pAxis->GetFirst()+binOffset; bin<=pAxis->GetLast(); bin++) {
-          
-        // linear plot. we simply need to find the appropriate bin
-        // for the 
-        Double_t xLowValue = pAxis->GetBinLowEdge(bin);
-        Double_t xUpValue  = pAxis->GetBinUpEdge(bin);
-        Int_t xPx0     = eta*TMath::Log10(xLowValue)+ offset;
-        Int_t xPx1     = eta*TMath::Log10(xUpValue) + offset;
-        THistRenderingRegion region;
-        region.fPixelRange  = std::make_pair(xPx0, xPx1);
-        region.fBinRange    = std::make_pair(bin, bin+1);
-        regions.push_back(region);
+      Double_t xMin = pAxis->GetBinLowEdge(pAxis->GetFirst());
+      Int_t binOffset=0;
+      while (xMin <= 0 && ((pAxis->GetFirst()+binOffset) != pAxis->GetLast()) ) {
+         binOffset++;
+         xMin = pAxis->GetBinLowEdge(pAxis->GetFirst()+binOffset);
       }
-
-    } else {
-
-//      std::cout << "\tLooping over pixels" << std::endl;
-      // loop over pixels
-      
-      Double_t beta = (TMath::Log10(xMax) - TMath::Log10(xMin))/(nPixels-1.0);
-
-      for (Int_t pixelIndex=0; pixelIndex<(nPixels-1); pixelIndex++) {
-        // linear plot
-        Int_t binLow  = pAxis->FindBin(xMin*TMath::Power(10.0, beta*pixelIndex));
-        Int_t binHigh = pAxis->FindBin(xMin*TMath::Power(10.0, beta*(pixelIndex+1)));
-        THistRenderingRegion region;
-        region.fPixelRange  = std::make_pair(pixelIndex, pixelIndex+1);
-        region.fBinRange    = std::make_pair(binLow, binHigh);
-        regions.push_back(region);
+      if (xMin <= 0) {
+         // this should cause an error if we have
+         return regions;
       }
-    }
-  } else {
-    // standard linear plot
-//      std::cout << "Plotting linear" << std::endl;
-    
-    if (strategy == Bins) {
-//      std::cout << "\tLooping over bins" << std::endl;
-      // loop over bins
-      for (Int_t bin=pAxis->GetFirst(); bin<=pAxis->GetLast(); bin++) {
-          
-        // linear plot. we simply need to find the appropriate bin
-        // for the 
-        Int_t xPx0     = ((bin - pAxis->GetFirst()) * nPixels)/nBins;
-        Int_t xPx1     = xPx0 + nPixels/nBins;
-        THistRenderingRegion region;
-        region.fPixelRange  = std::make_pair(xPx0, xPx1);
-        region.fBinRange    = std::make_pair(bin, bin+1);
-        regions.push_back(region);
-      }
-    } else {
-//      std::cout << "\tLooping over pixels" << std::endl;
-      // loop over pixels
-      for (Int_t pixelIndex=0; pixelIndex<nPixels-1; pixelIndex++) {
-        // linear plot
-        Int_t binLow  = (nBins*pixelIndex)/nPixels + pAxis->GetFirst();
-        Int_t binHigh = binLow + nBins/nPixels;
-        THistRenderingRegion region;
-        region.fPixelRange  = std::make_pair(pixelIndex, pixelIndex+1);
-        region.fBinRange    = std::make_pair(binLow, binHigh);
-        regions.push_back(region);
-      }
-    }
-  }
+      Double_t xMax = pAxis->GetBinUpEdge(pAxis->GetLast());
 
-  return regions;
+      if (strategy == Bins) {
+         // logarithmic plot. we find the pixel for the bin
+         // pixel = eta * log10(V) - alpha
+         //  where eta = nPixels/(log10(Vmax)-log10(Vmin))
+         //  and alpha = nPixels*log10(Vmin)/(log10(Vmax)-log10(Vmin))
+         // and V is axis value
+         Double_t eta = (nPixels-1.0)/(TMath::Log10(xMax) - TMath::Log10(xMin));
+         Double_t offset = -1.0 * eta * TMath::Log10(xMin);
+
+         for (Int_t bin=pAxis->GetFirst()+binOffset; bin<=pAxis->GetLast(); bin++) {
+
+            // linear plot. we simply need to find the appropriate bin
+            // for the 
+            Double_t xLowValue  = pAxis->GetBinLowEdge(bin);
+            Double_t xUpValue   = pAxis->GetBinUpEdge(bin);
+            Int_t xPx0          = eta*TMath::Log10(xLowValue)+ offset;
+            Int_t xPx1          = eta*TMath::Log10(xUpValue) + offset;
+            THistRenderingRegion region = {std::make_pair(xPx0, xPx1), 
+                                           std::make_pair(bin, bin+1)};
+            regions.push_back(region);
+         }
+
+      } else {
+
+         // loop over pixels
+
+         Double_t beta = (TMath::Log10(xMax) - TMath::Log10(xMin))/(nPixels-1.0);
+
+         for (Int_t pixelIndex=0; pixelIndex<(nPixels-1); pixelIndex++) {
+            // linear plot
+            Int_t binLow  = pAxis->FindBin(xMin*TMath::Power(10.0, beta*pixelIndex));
+            Int_t binHigh = pAxis->FindBin(xMin*TMath::Power(10.0, beta*(pixelIndex+1)));
+            THistRenderingRegion region = { std::make_pair(pixelIndex, pixelIndex+1),
+               std::make_pair(binLow, binHigh)};
+            regions.push_back(region);
+         }
+      }
+   } else {
+      // standard linear plot
+
+      if (strategy == Bins) {
+         // loop over bins
+         for (Int_t bin=pAxis->GetFirst(); bin<=pAxis->GetLast(); bin++) {
+
+            // linear plot. we simply need to find the appropriate bin
+            // for the 
+            Int_t xPx0     = ((bin - pAxis->GetFirst()) * nPixels)/nBins;
+            Int_t xPx1     = xPx0 + nPixels/nBins;
+
+            // make sure we don't compute beyond our bounds
+            if (xPx1>= nPixels) xPx1 = nPixels-1;
+
+            THistRenderingRegion region = {std::make_pair(xPx0, xPx1),
+               std::make_pair(bin, bin+1)};
+            regions.push_back(region);
+         }
+      } else {
+         // loop over pixels
+         for (Int_t pixelIndex=0; pixelIndex<nPixels-1; pixelIndex++) {
+            // linear plot
+            Int_t binLow  = (nBins*pixelIndex)/nPixels + pAxis->GetFirst();
+            Int_t binHigh = binLow + nBins/nPixels;
+            THistRenderingRegion region = { std::make_pair(pixelIndex, pixelIndex+1),
+               std::make_pair(binLow, binHigh)};
+            regions.push_back(region);
+         }
+      }
+   }
+
+   return regions;
 }
 
 void THistPainter::PaintColorLevelsFast(Option_t*)
@@ -4854,13 +4795,17 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
    [Control function to draw a 2D histogram as a color plot fast.](#HP14)
    End_html */
 
-   UpdatePalette(gHistImagePalette);
+   if (Hoption.System != kCARTESIAN) {
+     Error("THistPainter::PaintColorLevelsFast(Option_t*)", 
+           "Only cartesian coordinates supported by 'COL1' option. Using 'COL' option instead.");
+     PaintColorLevels(nullptr);
+     return;
+   }
+
    Double_t z; 
 
    Double_t zmin = fH->GetMinimum();
    Double_t zmax = fH->GetMaximum();
-//   std::cout << "zmin = " << zmin << std::endl;
-//   std::cout << "zmax = " << zmax << std::endl;
 
    Double_t dz = zmax - zmin;
    if (dz <= 0) { // Histogram filled with a constant value
@@ -4875,10 +4820,11 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
          zmax = TMath::Log10(zmax);
          dz = zmax - zmin;
       } else {
+         Error("THistPainter::PaintColorLevelsFast(Option_t*)",
+               "Cannot plot logz because bin content is less than 0.");
          return;
       }
    }
- //  std::cout << "dz = " << dz << std::endl;
 
    // Initialize the levels on the Z axis
    Int_t ndiv   = fH->GetContour();
@@ -4886,8 +4832,22 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
       ndiv = gStyle->GetNumberContours();
       fH->SetContour(ndiv);
    }
-   if (fH->TestBit(TH1::kUserContour) == 0) fH->SetContour(ndiv);
+   std::vector<Double_t> colorBounds(ndiv);
+   if (fH->TestBit(TH1::kUserContour) == 0) {
+      fH->SetContour(ndiv);
 
+      Double_t step = 1.0/ndiv;
+      for (Int_t i=0; i<ndiv; ++i) {
+         colorBounds[i] = step*i;
+      }
+   } else {
+      // normalize the user's contours 
+      Double_t max = fH->GetContourLevelPad(ndiv-1);
+      for (Int_t i=0; i<ndiv; ++i) {
+         colorBounds[i] = fH->GetContourLevelPad(i)/max;
+      }
+
+   }
 
    auto pFrame = gPad->GetFrame();
    Int_t px0 = gPad->XtoPixel(pFrame->GetX1());
@@ -4897,10 +4857,16 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
    Int_t nXPixels = px1-px0;
    Int_t nYPixels = py0-py1; // y=0 is at the top of the screen
 
-   std::vector<double> buffer(nXPixels*nYPixels, 0);
+   std::vector<Double_t> buffer(nXPixels*nYPixels, 0);
 
    auto xRegions = computeRenderingRegions(fXaxis, nXPixels, Hoption.Logx);
    auto yRegions = computeRenderingRegions(fYaxis, nYPixels, Hoption.Logy);
+   if (xRegions.size() == 0 || yRegions.size() == 0) {
+      TString errmsg("Encountered error while computing rendering regions.");
+      Error("THistPainter::PaintColorLevelFast(Option_t*)",
+            errmsg.Data());
+      return;
+   }
 
    for (auto& yRegion : yRegions) {
      for (auto& xRegion : xRegions ) {
@@ -4909,41 +4875,37 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
        const auto& yBinRange = yRegion.fBinRange;
 
        // sample the range
-       Double_t currentMax = fH->GetBinContent(xBinRange.first, yBinRange.first);
-   //    cout << xBinRange.first << ", " << yBinRange.first << " : " << currentMax << endl;
-   //    for (Int_t xbin = xBinRange.first+1; xbin<xBinRange.second; ++xbin) {
-   //      for (Int_t ybin = yBinRange.first+1; ybin<yBinRange.second; ++ybin) {
-   //        Double_t value = fH->GetBinContent(xbin, ybin);
-   //        cout << xbin << ", " << ybin << " : " << value << endl;
-   //        if (value > currentMax) currentMax = value;
-   //      }
-   //    }
-       z = currentMax;
+       z = fH->GetBinContent(xBinRange.second-1, yBinRange.second-1);
 
        if (Hoption.Logz) {
          if (z > 0) z = TMath::Log10(z);
          else       z = zmin;
        }
 
+       auto index  = TMath::BinarySearch(colorBounds.size(), colorBounds.data(), (z-zmin)/dz);
+       z = colorBounds[index];
+
+       // fill in the actual pixels
        const auto& xPixelRange = xRegion.fPixelRange;
        const auto& yPixelRange = yRegion.fPixelRange;
        for (Int_t xPx = xPixelRange.first; xPx <= xPixelRange.second; ++xPx) {
          for (Int_t yPx = yPixelRange.first; yPx <= yPixelRange.second; ++yPx) {
            Int_t pixel = yPx*nXPixels + xPx;
-           buffer.at(pixel) = z;
+           buffer[pixel] = z;
          }
        }
      } // end px loop
    } // end py loop
 
-   if (!fImage) {
-      fImage = TImage::Create();
-      fImage->SetImageQuality(TAttImage::kImgBest);
-   }
-   fImage->SetImage(buffer.data(), nXPixels, nYPixels, gHistImagePalette);
+   TImagePalette* pPalette = TImagePalette::Create("col");
+   TImage* pImage = TImage::Create();
+   pImage->SetImageQuality(TAttImage::kImgBest);
+   pImage->SetImage(buffer.data(), nXPixels, nYPixels, pPalette);
+   delete pPalette;
 
    Window_t wid = static_cast<Window_t>(gVirtualX->GetWindowID(gPad->GetPixmapID()));
-   fImage->PaintImage(wid, px0, py1, 0, 0, nXPixels, nYPixels);
+   pImage->PaintImage(wid, px0, py1, 0, 0, nXPixels, nYPixels);
+   delete pImage;
 
    if (Hoption.Zscale) PaintPalette();
 
@@ -5088,20 +5050,6 @@ void THistPainter::PaintColorLevels(Option_t*)
    fH->TAttFill::Modify();
 
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-void THistPainter::PaintColorLevelsDispatch(Option_t *opt)
-{
-   if (Hoption.Fast && Hoption.System!=kPOLAR) {
-      if (dynamic_cast<TProfile2D*>(fH) == nullptr) {
-         PaintColorLevelsFast(opt);
-      }
-   } else {
-      PaintColorLevels(opt);
-   }
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// [Control function to draw a 2D histogram as a contour plot.](#HP16)
@@ -7150,7 +7098,7 @@ void THistPainter::PaintLegoAxis(TGaxis *axis, Double_t ang)
 ////////////////////////////////////////////////////////////////////////////////
 /// [Paint the color palette on the right side of the pad.](#HP22)
 
-void THistPainter::PaintPalette()
+void THistPainter::PaintPalette(Int_t type)
 {
 
    TPaletteAxis *palette = (TPaletteAxis*)fFunctions->FindObject("palette");
@@ -7179,6 +7127,7 @@ void THistPainter::PaintPalette()
       Double_t xmax = gPad->PadtoX(xup + xr);
       if (xmax > x2) xmax = gPad->PadtoX(gPad->GetX2()-0.01*xr);
       palette = new TPaletteAxis(xmin,ymin,xmax,ymax,fH);
+      palette->SetColorScheme(type);
       fFunctions->AddFirst(palette);
       palette->Paint();
    }
@@ -8447,7 +8396,13 @@ void THistPainter::PaintTable(Option_t *option)
          if (Hoption.Scat)         PaintScatterPlot(option);
          if (Hoption.Arrow)        PaintArrows(option);
          if (Hoption.Box)          PaintBoxes(option);
-         if (Hoption.Color)        PaintColorLevelsDispatch(option);
+         if (Hoption.Color) {
+            if (Hoption.Color == 3) {
+               PaintColorLevelsFast(option);
+           } else {
+               PaintColorLevels(option);
+           }
+         }
          if (Hoption.Contour)      PaintContour(option);
          if (Hoption.Text)         PaintText(option);
          if (Hoption.Error >= 100) Paint2DErrors(option);

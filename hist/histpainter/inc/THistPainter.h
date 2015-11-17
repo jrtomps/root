@@ -39,8 +39,6 @@ class TGaxis;
 class TPainter3dAlgorithms;
 class TGraph2DPainter;
 class TPie;
-class TImage;
-class TImagePalette;
 const Int_t kMaxCuts = 16;
 
 struct THistRenderingRegion 
@@ -69,7 +67,6 @@ protected:
    TList                *fStack;             //Pointer to stack of histograms (if any)
    Int_t                 fShowProjection;    //True if a projection must be drawn
    TString               fShowOption;        //Option to draw the projection
-   TImage		*fImage;             //Image to render cartesian "col" into
 
 public:
    THistPainter();
@@ -93,10 +90,8 @@ public:
    virtual void       PaintBoxes(Option_t *option);
    virtual void       PaintCandlePlot(Option_t *option);
    virtual void       PaintViolinPlot(Option_t *option);
-   virtual void       PaintColorLevelsDispatch(Option_t *option);
    virtual void       PaintColorLevels(Option_t *option);
    virtual void       PaintColorLevelsFast(Option_t *option);
-   virtual void       UpdatePalette(TImagePalette *pPalette);
    virtual std::vector<THistRenderingRegion> computeRenderingRegions(TAxis *pAxis, Int_t nPixels, bool isLog);
 
    virtual void       PaintTH2PolyBins(Option_t *option);
@@ -118,7 +113,7 @@ public:
    virtual Int_t      PaintInitH();
    virtual void       PaintLego(Option_t *option);
    virtual void       PaintLegoAxis(TGaxis *axis, Double_t ang);
-   virtual void       PaintPalette();
+   virtual void       PaintPalette(Int_t type=0);
    virtual void       PaintScatterPlot(Option_t *option);
    virtual void       PaintStat(Int_t dostat, TF1 *fit);
    virtual void       PaintStat2(Int_t dostat, TF1 *fit);
