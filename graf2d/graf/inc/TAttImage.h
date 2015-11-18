@@ -101,6 +101,7 @@ public:
    TImagePalette &operator=(const TImagePalette &palette);
 
    static TImagePalette* Create(Option_t* opts);
+   static TImagePalette* CreateCOLPalette(Int_t nContours);
 
    ClassDef(TImagePalette,2)  // Color Palette for value -> color conversion
 };

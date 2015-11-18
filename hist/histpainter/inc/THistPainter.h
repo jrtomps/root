@@ -113,7 +113,7 @@ public:
    virtual Int_t      PaintInitH();
    virtual void       PaintLego(Option_t *option);
    virtual void       PaintLegoAxis(TGaxis *axis, Double_t ang);
-   virtual void       PaintPalette(Int_t type=0);
+   virtual void       PaintPalette();
    virtual void       PaintScatterPlot(Option_t *option);
    virtual void       PaintStat(Int_t dostat, TF1 *fit);
    virtual void       PaintStat2(Int_t dostat, TF1 *fit);

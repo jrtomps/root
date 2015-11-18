@@ -4833,20 +4833,16 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
       fH->SetContour(ndiv);
    }
    std::vector<Double_t> colorBounds(ndiv);
+   std::vector<Double_t> contours(ndiv, 0);
    if (fH->TestBit(TH1::kUserContour) == 0) {
       fH->SetContour(ndiv);
-
-      Double_t step = 1.0/ndiv;
-      for (Int_t i=0; i<ndiv; ++i) {
-         colorBounds[i] = step*i;
-      }
    } else {
-      // normalize the user's contours 
-      Double_t max = fH->GetContourLevelPad(ndiv-1);
-      for (Int_t i=0; i<ndiv; ++i) {
-         colorBounds[i] = fH->GetContourLevelPad(i)/max;
-      }
+      fH->GetContour(contours.data());
+   }
 
+   Double_t step = 1.0/ndiv;
+   for (Int_t i=0; i<ndiv; ++i) {
+      colorBounds[i] = step*i;
    }
 
    auto pFrame = gPad->GetFrame();
@@ -4868,6 +4864,7 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
       return;
    }
 
+
    for (auto& yRegion : yRegions) {
      for (auto& xRegion : xRegions ) {
 
@@ -4882,8 +4879,15 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
          else       z = zmin;
        }
 
-       auto index  = TMath::BinarySearch(colorBounds.size(), colorBounds.data(), (z-zmin)/dz);
-       z = colorBounds[index];
+       if (fH->TestBit(TH1::kUserContour) == 1) {
+          // contours are absolute values
+          auto index  = TMath::BinarySearch(contours.size(), contours.data(), z);
+          z = colorBounds[index];
+       } else {
+          Int_t index = 0.01 + ((z - zmin)/dz)*ndiv;
+          if (index == colorBounds.size()) index--;
+          z = colorBounds[index];
+       }
 
        // fill in the actual pixels
        const auto& xPixelRange = xRegion.fPixelRange;
@@ -4897,7 +4901,7 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
      } // end px loop
    } // end py loop
 
-   TImagePalette* pPalette = TImagePalette::Create("col");
+   TImagePalette* pPalette = TImagePalette::CreateCOLPalette(ndiv);
    TImage* pImage = TImage::Create();
    pImage->SetImageQuality(TAttImage::kImgBest);
    pImage->SetImage(buffer.data(), nXPixels, nYPixels, pPalette);
@@ -7098,7 +7102,7 @@ void THistPainter::PaintLegoAxis(TGaxis *axis, Double_t ang)
 ////////////////////////////////////////////////////////////////////////////////
 /// [Paint the color palette on the right side of the pad.](#HP22)
 
-void THistPainter::PaintPalette(Int_t type)
+void THistPainter::PaintPalette()
 {
 
    TPaletteAxis *palette = (TPaletteAxis*)fFunctions->FindObject("palette");
@@ -7127,7 +7131,6 @@ void THistPainter::PaintPalette(Int_t type)
       Double_t xmax = gPad->PadtoX(xup + xr);
       if (xmax > x2) xmax = gPad->PadtoX(gPad->GetX2()-0.01*xr);
       palette = new TPaletteAxis(xmin,ymin,xmax,ymax,fH);
-      palette->SetColorScheme(type);
       fFunctions->AddFirst(palette);
       palette->Paint();
    }

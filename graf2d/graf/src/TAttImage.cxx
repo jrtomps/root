@@ -705,6 +705,34 @@ TImagePalette* TImagePalette::Create(Option_t* opts)
    return pPalette;
 }
 
+TImagePalette* TImagePalette::CreateCOLPalette(Int_t ncontours)
+{
+   Int_t ncolors  = gStyle->GetNumberOfColors();
+   Int_t minColor = 0;
+   Double_t scale = 1;
+   if (ncontours != 0 ) {
+      minColor = (0.99*ncolors)/ncontours;
+      scale = static_cast<Double_t>(ncolors)/ncontours;
+      ncolors  = ncontours;
+   }
+
+   // Define the new palette using the current palette in TStyle
+   auto pPalette = new TImagePalette(ncolors);
+   Double_t step = 1./(pPalette->fNumPoints-1);
+
+   for (UInt_t i=0; i<pPalette->fNumPoints; ++i) {
+      TColor* pColor = gROOT->GetColor(gStyle->GetColorPalette(minColor + i*scale));
+      pPalette->fPoints[i] = i*step; 
+      if (pColor) {
+         pPalette->fColorRed[i] = UShort_t(pColor->GetRed()*255) << 8;
+         pPalette->fColorGreen[i] = UShort_t(pColor->GetGreen()*255) << 8;
+         pPalette->fColorBlue[i] = UShort_t(pColor->GetBlue()*255) << 8;
+         pPalette->fColorAlpha[i] = UShort_t(pColor->GetAlpha()*255) << 8;
+      }
+   }
+
+   return pPalette;
+}
 ////////////////////////////////////////////////////////////////////////////////
 /// Opens a GUI to edit the color palette.
 
