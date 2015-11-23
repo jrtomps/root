@@ -565,6 +565,8 @@ TH1::TH1(): TNamed(), TAttLine(), TAttFill(), TAttMarker()
    fTsumw         = fTsumw2=fTsumwx=fTsumwx2=0;
    fMaximum       = -1111;
    fMinimum       = -1111;
+   fMinimumBin       = -1111;
+   fMaximumBin       = -1111;
    fBufferSize    = 0;
    fBuffer        = 0;
    fBinStatErrOpt = kNormal;
@@ -735,6 +737,8 @@ void TH1::Build()
    fTsumw         = fTsumw2=fTsumwx=fTsumwx2=0;
    fMaximum       = -1111;
    fMinimum       = -1111;
+   fMinimumBin       = -1111;
+   fMaximumBin       = -1111;
    fBufferSize    = 0;
    fBuffer        = 0;
    fBinStatErrOpt = kNormal;
@@ -804,6 +808,8 @@ Bool_t TH1::Add(TF1 *f1, Double_t c1, Option_t *option)
    PutStats(s1);
    SetMinimum();
    SetMaximum();
+   SetMinimumBin();
+   SetMaximumBin();
 
    //   - Loop on bins (including underflows/overflows)
    Int_t bin, binx, biny, binz;
@@ -929,6 +935,8 @@ Bool_t TH1::Add(const TH1 *h1, Double_t c1)
 
    SetMinimum();
    SetMaximum();
+   SetMinimumBin();
+   SetMaximumBin();
 
    //   - Loop on bins (including underflows/overflows)
    Double_t factor = 1;
@@ -1110,6 +1118,8 @@ Bool_t TH1::Add(const TH1 *h1, const TH1 *h2, Double_t c1, Double_t c2)
 
    SetMinimum();
    SetMaximum();
+   SetMinimumBin();
+   SetMaximumBin();
 
    if (normWidth) { // DEPRECATED CASE: belongs to fitting / drawing modules
 
@@ -2530,6 +2540,8 @@ void TH1::Copy(TObject &obj) const
    ((TH1&)obj).fTsumwx2   = fTsumwx2;
    ((TH1&)obj).fMaximum   = fMaximum;
    ((TH1&)obj).fMinimum   = fMinimum;
+   ((TH1&)obj).fMaximumBin   = fMaximumBin;
+   ((TH1&)obj).fMinimumBin   = fMinimumBin;
 
    TAttLine::Copy(((TH1&)obj));
    TAttFill::Copy(((TH1&)obj));
@@ -2643,6 +2655,8 @@ Bool_t TH1::Divide(TF1 *f1, Double_t c1)
 
    SetMinimum();
    SetMaximum();
+   SetMinimumBin();
+   SetMaximumBin();
 
    //   - Loop on bins (including underflows/overflows)
    Int_t bin, binx, biny, binz;
@@ -2801,6 +2815,8 @@ Bool_t TH1::Divide(const TH1 *h1, const TH1 *h2, Double_t c1, Double_t c2, Optio
 
    SetMinimum();
    SetMaximum();
+   SetMinimumBin();
+   SetMaximumBin();
 
    //   - Loop on bins (including underflows/overflows)
    for (Int_t i = 0; i < fNcells; ++i) {
@@ -5633,6 +5649,8 @@ Bool_t TH1::Multiply(TF1 *f1, Double_t c1)
    // reset min-maximum
    SetMinimum();
    SetMaximum();
+   SetMinimumBin();
+   SetMaximumBin();
 
    //   - Loop on bins (including underflows/overflows)
    Double_t xx[3];
@@ -5706,6 +5724,8 @@ Bool_t TH1::Multiply(const TH1 *h1)
    //   - Reset min-  maximum
    SetMinimum();
    SetMaximum();
+   SetMinimumBin();
+   SetMaximumBin();
 
    //   - Loop on bins (including underflows/overflows)
    for (Int_t i = 0; i < fNcells; ++i) {
@@ -5770,6 +5790,8 @@ Bool_t TH1::Multiply(const TH1 *h1, const TH1 *h2, Double_t c1, Double_t c2, Opt
    //   - Reset min - maximum
    SetMinimum();
    SetMaximum();
+   SetMinimumBin();
+   SetMaximumBin();
 
    //   - Loop on bins (including underflows/overflows)
    Double_t c1sq = c1 * c1; Double_t c2sq = c2 * c2;
@@ -6178,6 +6200,8 @@ void TH1::Scale(Double_t c1, Option_t *option)
       for(Int_t i = 0; i < fNcells; ++i) UpdateBinContent(i, c1 * RetrieveBinContent(i));
       if (fSumw2.fN) for(Int_t i = 0; i < fNcells; ++i) fSumw2.fArray[i] *= (c1 * c1); // update errors
       SetMinimum(); SetMaximum(); // minimum and maximum value will be recalculated the next time
+      SetMinimumBin();
+      SetMaximumBin();
    }
 
    // if contours set, must also scale contours
@@ -6543,6 +6567,8 @@ void TH1::Streamer(TBuffer &b)
       } else {
          b >> fMaximum;
          b >> fMinimum;
+         b >> fMinimumBin;
+         b >> fMaximumBin;
          b >> fNormFactor;
          fContour.Streamer(b);
       }
@@ -6676,6 +6702,8 @@ void TH1::Reset(Option_t *option)
    if (opt.Contains("M")) {
       SetMinimum();
       SetMaximum();
+      SetMinimumBin();
+      SetMaximumBin();
    }
 
    if (opt.Contains("ICE") && !opt.Contains("S")) return;
@@ -6871,6 +6899,12 @@ void TH1::SavePrimitiveHelp(std::ostream &out, const char *hname, Option_t *opti
    }
    if (fMaximum != -1111) {
       out<<"   "<<hname<<"->SetMaximum("<<fMaximum<<");"<<std::endl;
+   }
+   if (fMinimumBin != -1111) {
+      out<<"   "<<hname<<"->SetMinimumBin("<<fMinimumBin<<");"<<std::endl;
+   }
+   if (fMaximumBin != -1111) {
+      out<<"   "<<hname<<"->SetMaximumBin("<<fMaximumBin<<");"<<std::endl;
    }
    if (fNormFactor != 0) {
       out<<"   "<<hname<<"->SetNormFactor("<<fNormFactor<<");"<<std::endl;
@@ -7957,6 +7991,11 @@ Int_t TH1::GetMaximumBin() const
 
 Int_t TH1::GetMaximumBin(Int_t &locmax, Int_t &locmay, Int_t &locmaz) const
 {
+   if (fMaximumBin != -1111) { 
+     GetBinXYZ(fMaximumBin, locmax, locmay, locmaz); 
+     return fMaximumBin; 
+   }
+
       // empty the buffer
    if (fBuffer) ((TH1*)this)->BufferEmpty();
 
@@ -8042,6 +8081,11 @@ Int_t TH1::GetMinimumBin() const
 
 Int_t TH1::GetMinimumBin(Int_t &locmix, Int_t &locmiy, Int_t &locmiz) const
 {
+   if (fMinimumBin != -1111) { 
+     GetBinXYZ(fMinimumBin, locmix, locmiy, locmiz); 
+     return fMinimumBin; 
+   }
+
       // empty the buffer
    if (fBuffer) ((TH1*)this)->BufferEmpty();
    
@@ -8073,6 +8117,49 @@ Int_t TH1::GetMinimumBin(Int_t &locmix, Int_t &locmiy, Int_t &locmiz) const
    return locm;
 }
 
+//______________________________________________________________________________
+void TH1::UpdateMinimumAndMaximum()
+{
+  // Updates the cached fMinimum, fMaximum, fMinimumBin, and fMaximumBin
+  // values. This sets all 4 values with 1 pass through all of the bins.
+  // This should allow for speedy performance on GetMinimum(), GetMaximum(),
+  // GetMinimumBin() and GetMaximumBin() operations. You can check to see
+  // if this need to be run by conditioning its call on TH1::MinOrMaxNeedsUpdate()
+
+   Int_t bin, binx, biny, binz;
+   Int_t xfirst  = fXaxis.GetFirst();
+   Int_t xlast   = fXaxis.GetLast();
+   Int_t yfirst  = fYaxis.GetFirst();
+   Int_t ylast   = fYaxis.GetLast();
+   Int_t zfirst  = fZaxis.GetFirst();
+   Int_t zlast   = fZaxis.GetLast();
+   Double_t value;
+   fMinimum = FLT_MAX;
+   fMaximum = FLT_MIN;
+   for (binz=zfirst;binz<=zlast;binz++) {
+      for (biny=yfirst;biny<=ylast;biny++) {
+         for (binx=xfirst;binx<=xlast;binx++) {
+            bin = GetBin(binx,biny,binz);
+            value = GetBinContent(bin);
+            if (value < fMinimum) {
+              fMinimum = value;
+              fMinimumBin = bin;
+            }
+
+            if (value > fMaximum) {
+              fMaximum = value;
+              fMaximumBin = bin;
+            }
+         }
+      }
+   }
+}
+
+Bool_t TH1::MinOrMaxNeedsUpdate() const
+{
+  return (fMinimumBin == -1111) || (fMaximumBin == -1111) 
+         || (fMinimum == -1111) || (fMaximum == -1111);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Redefine  x axis parameters.

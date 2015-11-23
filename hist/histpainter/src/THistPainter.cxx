@@ -3625,7 +3625,6 @@ void THistPainter::Paint(Option_t *option)
          }
       }
       PaintTable(option);
-      fH->SetMinimum(minsav);
       if (Hoption.Func) {
          Hoption_t hoptsave = Hoption;
          Hparam_t  hparsave = Hparam;
@@ -3634,6 +3633,7 @@ void THistPainter::Paint(Option_t *option)
          Hoption = hoptsave;
          Hparam  = hparsave;
       }
+      fH->SetMinimum(minsav);
       gCurrentHist = oldhist;
       delete [] fXbuf; delete [] fYbuf;
       if (fH->GetDimension() == 1) {
@@ -4804,6 +4804,9 @@ void THistPainter::PaintColorLevelsFast(Option_t*)
 
    Double_t z; 
 
+   if (fH->MinOrMaxNeedsUpdate()) {
+     fH->UpdateMinimumAndMaximum();
+   }
    Double_t zmin = fH->GetMinimum();
    Double_t zmax = fH->GetMaximum();
 

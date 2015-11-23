@@ -111,6 +111,8 @@ protected:
     Double_t      fTsumwx2;         //Total Sum of weight*X*X
     Double_t      fMaximum;         //Maximum value for plotting
     Double_t      fMinimum;         //Minimum value for plotting
+    Int_t         fMinimumBin;
+    Int_t         fMaximumBin;
     Double_t      fNormFactor;      //Normalization factor
     TArrayD       fContour;         //Array to display contour levels
     TArrayD       fSumw2;           //Array of sum of squares of weights
@@ -291,6 +293,9 @@ public:
    virtual Int_t    GetMinimumBin() const;
    virtual Int_t    GetMinimumBin(Int_t &locmix, Int_t &locmiy, Int_t &locmiz) const;
    virtual Double_t GetMinimumStored() const {return fMinimum;}
+   virtual void     UpdateMinimumAndMaximum();
+   virtual Bool_t   MinOrMaxNeedsUpdate() const;
+
    virtual Double_t GetMean(Int_t axis=1) const;
    virtual Double_t GetMeanError(Int_t axis=1) const;
    virtual Int_t    GetNbinsX() const {return fXaxis.GetNbins();}
@@ -393,6 +398,8 @@ public:
     */
    virtual void     SetMaximum(Double_t maximum = -1111) { fMaximum = maximum; }; // *MENU*
    virtual void     SetMinimum(Double_t minimum = -1111) { fMinimum = minimum; }; // *MENU*
+   virtual void     SetMaximumBin(Int_t maxbin=-1111) { fMaximumBin = maxbin; }
+   virtual void     SetMinimumBin(Int_t minbin=-1111) { fMinimumBin = minbin; }
 
    virtual void     SetName(const char *name); // *MENU*
    virtual void     SetNameTitle(const char *name, const char *title);
@@ -430,7 +437,7 @@ public:
    virtual void     SetCellError(Int_t binx, Int_t biny, Double_t content)
                         { Obsolete("SetCellError", "v6-00", "v6-04"); SetBinError(binx, biny, content); }
 
-   ClassDef(TH1,7)  //1-Dim histogram base class
+   ClassDef(TH1,8)  //1-Dim histogram base class
 
 protected:
    virtual Double_t RetrieveBinContent(Int_t bin) const;
