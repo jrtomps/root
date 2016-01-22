@@ -16,6 +16,7 @@
 #include "IncrementalExecutor.h"
 #include "IncrementalParser.h"
 #include "MultiplexInterpreterCallbacks.h"
+#include "ASTImportSource.h"
 
 #include "cling/Interpreter/CIFactory.h"
 #include "cling/Interpreter/ClangInternalState.h"
@@ -72,8 +73,6 @@ namespace {
 } // unnamed namespace
 
 namespace cling {
-  // FIXME: workaround until JIT supports exceptions
-  jmp_buf* Interpreter::m_JumpBuf;
 
   Interpreter::PushTransactionRAII::PushTransactionRAII(const Interpreter* i)
     : m_Interpreter(i) {
@@ -165,7 +164,8 @@ namespace cling {
   }
 
   Interpreter::Interpreter(int argc, const char* const *argv,
-                           const char* llvmdir /*= 0*/, bool noRuntime) :
+                           const char* llvmdir /*= 0*/, bool noRuntime,
+                           bool isChildInterp) :
     m_UniqueCounter(0), m_PrintDebug(false), m_DynamicLookupDeclared(false),
     m_DynamicLookupEnabled(false), m_RawInputEnabled(false) {
 
@@ -182,7 +182,7 @@ namespace cling {
 
     m_IncrParser.reset(new IncrementalParser(this, LeftoverArgs.size(),
                                              &LeftoverArgs[0],
-                                             llvmdir));
+                                             llvmdir, isChildInterp));
 
     Sema& SemaRef = getSema();
     Preprocessor& PP = SemaRef.getPreprocessor();
@@ -195,7 +195,8 @@ namespace cling {
                                                      /*isTemp*/true), this));
 
     if (!isInSyntaxOnlyMode())
-      m_Executor.reset(new IncrementalExecutor(SemaRef.Diags));
+      m_Executor.reset(new IncrementalExecutor(SemaRef.Diags,
+                                               getCI()->getCodeGenOpts()));
 
     // Tell the diagnostic client that we are entering file parsing mode.
     DiagnosticConsumer& DClient = getCI()->getDiagnosticClient();
@@ -203,7 +204,7 @@ namespace cling {
 
     llvm::SmallVector<IncrementalParser::ParseResultTransaction, 2>
       IncrParserTransactions;
-    m_IncrParser->Initialize(IncrParserTransactions);
+    m_IncrParser->Initialize(IncrParserTransactions, isChildInterp);
 
     handleFrontendOptions();
 
@@ -221,9 +222,41 @@ namespace cling {
       m_IncrParser->commitTransaction(I);
     // Disable suggestions for ROOT
     bool showSuggestions = !llvm::StringRef(ClingStringify(CLING_VERSION)).startswith("ROOT");
-    std::unique_ptr<InterpreterCallbacks>
-       AutoLoadCB(new AutoloadCallback(this, showSuggestions));
-    setCallbacks(std::move(AutoLoadCB));
+
+    // We need InterpreterCallbacks only if it is a parent Interpreter.
+    if (!isChildInterp) {
+      std::unique_ptr<InterpreterCallbacks>
+         AutoLoadCB(new AutoloadCallback(this, showSuggestions));
+      setCallbacks(std::move(AutoLoadCB));
+    }
+  }
+
+  ///\brief Constructor for the child Interpreter.
+  /// Passing the parent Interpreter as an argument.
+  ///
+  Interpreter::Interpreter(Interpreter &parentInterpreter, int argc,
+                           const char* const *argv,
+                           const char* llvmdir /*= 0*/, bool noRuntime) :
+    Interpreter(argc, argv, llvmdir, noRuntime, /* isChildInterp */ true) {
+    // Do the "setup" of the connection between this interpreter and
+    // its parent interpreter.
+
+    // The "bridge" between the interpreters.
+    ASTImportSource *myExternalSource =
+      new ASTImportSource(&parentInterpreter, this);
+
+    llvm::IntrusiveRefCntPtr <ExternalASTSource>
+      astContextExternalSource(myExternalSource);
+
+    getCI()->getASTContext().setExternalSource(astContextExternalSource);
+
+    // Inform the Translation Unit Decl of I2 that it has to search somewhere
+    // else to find the declarations.
+    getCI()->getASTContext().getTranslationUnitDecl()->setHasExternalVisibleStorage();
+
+    // Give my IncrementalExecutor a pointer to the Incremental executor of the
+    // parent Interpreter.
+    m_Executor->setExternalIncrementalExecutor(parentInterpreter.m_Executor.get());
   }
 
   Interpreter::~Interpreter() {
@@ -910,6 +943,32 @@ namespace cling {
     return 0;
   }
 
+  void*
+  Interpreter::compileDtorCallFor(const clang::RecordDecl* RD) {
+    void* &addr = m_DtorWrappers[RD];
+    if (addr)
+      return addr;
+
+    std::string funcname;
+    {
+      llvm::raw_string_ostream namestr(funcname);
+      namestr << "__cling_Destruct_" << RD;
+    }
+
+    std::string code = "extern \"C\" void ";
+    clang::QualType RDQT(RD->getTypeForDecl(), 0);
+    std::string typeName
+      = utils::TypeName::GetFullyQualifiedName(RDQT, RD->getASTContext());
+    std::string dtorName = RD->getNameAsString();
+    code += funcname + "(void* obj){((" + typeName + "*)obj)->~"
+      + dtorName + "();}";
+
+    // ifUniq = false: we know it's unique, no need to check.
+    addr = compileFunction(funcname, code, false /*ifUniq*/,
+                           false /*withAccessControl*/);
+    return addr;
+  }
+
   void Interpreter::createUniqueName(std::string& out) {
     out += utils::Synthesize::UniquePrefix;
     llvm::raw_string_ostream(out) << m_UniqueCounter++;
@@ -1065,8 +1124,8 @@ namespace cling {
     while(true) {
       cling::Transaction* T = m_IncrParser->getLastTransaction();
       if (!T) {
-         llvm::errs() << "cling: invalid last transaction; unload failed!\n";
-         return;
+        llvm::errs() << "cling: invalid last transaction; unload failed!\n";
+        return;
       }
       if (InterpreterCallbacks* callbacks = getCallbacks())
         callbacks->TransactionUnloaded(*T);
@@ -1078,6 +1137,36 @@ namespace cling {
         break;
     }
 
+  }
+
+  static void runAndRemoveStaticDestructorsImpl(IncrementalExecutor &executor,
+                                std::vector<const Transaction*> &transactions,
+                                         unsigned int begin, unsigned int end) {
+
+    for(auto i = begin; i != end; --i) {
+      if (transactions[i-1] != nullptr)
+        executor.runAndRemoveStaticDestructors(const_cast<Transaction*>(transactions[i-1]));
+    }
+  }
+
+  void Interpreter::runAndRemoveStaticDestructors(unsigned numberOfTransactions) {
+    if (!m_Executor)
+      return;
+    auto transactions( m_IncrParser->getAllTransactions() );
+    unsigned int min = 0;
+    if (transactions.size() > numberOfTransactions) {
+      min = transactions.size() - numberOfTransactions;
+    }
+    runAndRemoveStaticDestructorsImpl(*m_Executor, transactions,
+                                      transactions.size(), min);
+  }
+
+  void Interpreter::runAndRemoveStaticDestructors() {
+    if (!m_Executor)
+      return;
+    auto transactions( m_IncrParser->getAllTransactions() );
+    runAndRemoveStaticDestructorsImpl(*m_Executor, transactions,
+                                      transactions.size(), 0);
   }
 
   void Interpreter::installLazyFunctionCreator(void* (*fp)(const std::string&)) {

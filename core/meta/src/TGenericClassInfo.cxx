@@ -41,7 +41,7 @@ namespace Internal {
 
    TGenericClassInfo::TGenericClassInfo(const char *fullClassname,
                                         const char *declFileName, Int_t declFileLine,
-                                        const type_info &info, const Internal::TInitBehavior  *action,
+                                        const std::type_info &info, const Internal::TInitBehavior  *action,
                                         DictFuncPtr_t dictionary,
                                         TVirtualIsAProxy *isa, Int_t pragmabits, Int_t sizof)
       : fAction(action), fClass(0), fClassName(fullClassname),
@@ -61,7 +61,7 @@ namespace Internal {
 
    TGenericClassInfo::TGenericClassInfo(const char *fullClassname, Int_t version,
                                         const char *declFileName, Int_t declFileLine,
-                                        const type_info &info, const Internal::TInitBehavior  *action,
+                                        const std::type_info &info, const Internal::TInitBehavior  *action,
                                         DictFuncPtr_t dictionary,
                                         TVirtualIsAProxy *isa, Int_t pragmabits, Int_t sizof)
       : fAction(action), fClass(0), fClassName(fullClassname),
@@ -173,7 +173,8 @@ namespace Internal {
       delete fStreamer;
       if (!fClass) delete fIsA; // fIsA is adopted by the class if any.
       fIsA = 0;
-      if (!ROOT::gROOTLocal || !ROOT::gROOTLocal->Initialized() || !gROOT->GetListOfClasses()) return;
+      using ROOT::Internal::gROOTLocal;
+      if (!gROOTLocal || !gROOTLocal->Initialized() || !gROOTLocal->GetListOfClasses()) return;
       if (fAction) GetAction().Unregister(GetClassName());
    }
 
@@ -225,7 +226,7 @@ namespace Internal {
          fClass->SetMerge(fMerge);
          fClass->SetResetAfterMerge(fResetAfterMerge);
          fClass->AdoptStreamer(fStreamer); fStreamer = 0;
-         // If IsZombie is true, something went wront and we will not be
+         // If IsZombie is true, something went wrong and we will not be
          // able to properly copy the collection proxy
          if (!fClass->IsZombie()) {
             if (fCollectionProxy) fClass->CopyCollectionProxy(*fCollectionProxy);
@@ -319,9 +320,9 @@ namespace Internal {
       return fCollectionProxyInfo;
    }
 
-   const type_info &TGenericClassInfo::GetInfo() const
+   const std::type_info &TGenericClassInfo::GetInfo() const
    {
-      // Return the typeifno value
+      // Return the typeinfo value
 
       return fInfo;
    }
@@ -450,7 +451,7 @@ namespace Internal {
 
    void TGenericClassInfo::SetStreamerFunc(ClassStreamerFunc_t streamer)
    {
-      // Set a wrapper around the Streamer memger function.
+      // Set a wrapper around the Streamer member function.
 
       fStreamerFunc = streamer;
       if (fClass) fClass->SetStreamerFunc(streamer);
@@ -458,7 +459,7 @@ namespace Internal {
 
    void TGenericClassInfo::SetConvStreamerFunc(ClassConvStreamerFunc_t streamer)
    {
-      // Set a wrapper around the Streamer memger function.
+      // Set a wrapper around the Streamer member function.
 
       fConvStreamerFunc = streamer;
       if (fClass) fClass->SetConvStreamerFunc(streamer);

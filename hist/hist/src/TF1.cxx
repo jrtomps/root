@@ -154,15 +154,16 @@ TF1 graphics function is via the TH1 and TGraph drawing functions.
 
 The following types of functions can be created:
 
-* [A](#F1) - Expression using variable x and no parameters
-* [B](#F2) - Expression using variable x with parameters
-* [C](#F3) - A general C function with parameters
-* [D](#F4) - A general C++ function object (functor) with parameters
-* [E](#F5) - A member function with parameters of a general C++ class
+1.  [Expression using variable x and no parameters]([#F1)
+2.  [Expression using variable x with parameters](#F2)
+3.  [Lambda Expression with variable x and parameters](#F3)  
+4.  [A general C function with parameters](#F4)
+5.  [A general C++ function object (functor) with parameters](#F5)
+6.  [A member function with parameters of a general C++ class](#F6)
 
 
 
-### <a name="F1"></a> A - Expression using variable x and no parameters
+### <a name="F1"></a> 1 - Expression using variable x and no parameters
 
 #### Case 1: inline expression using standard C++ functions/operators
 
@@ -192,7 +193,7 @@ TF1 *fa3 = new TF1("fa3","myFunc(x)",-3,5);
 fa3->Draw();
 ~~~~
 
-### <a name="F2"></a> B - Expression using variable x with parameters
+### <a name="F2"></a> 2 - Expression using variable x with parameters
 
 #### Case 1: inline expression using standard C++ functions/operators
 
@@ -245,7 +246,20 @@ Begin_Macro(source)
 } 
 End_Macro
 
-###<a name="F3"></a> C - A general C function with parameters
+###<a name="F3"></a> 3 - A lambda expression with variables and parameters **(NEW)**
+
+TF1 now supports using lambda expressions in the formula. This allows, by using a full C++ syntax the full power of lambda 
+functions and still mantain the capability of storing the function in a file which cannot be done with 
+funciton pointer or lambda written not as expression, but as code (see items belows). 
+
+Example on how using lambda to define a sum of two functions. Note that is necessary to provide the number of parameters
+~~~~{.cpp}
+TF1 f1("f1","sin(x)",0,10);
+TF1 f2("f2","cos(x)",0,10);
+TF1 fsum("f1","[&](double *x, double *p){ return p[0]*f1(x) + p[1]*f2(x); }",0,10,2); 
+~~~~
+
+###<a name="F4"></a> 4 - A general C function with parameters
 
 Consider the macro myfunc.C below:
 
@@ -307,7 +321,7 @@ Example:
 ~~~~
 
 
-### <a name="F4"></a> D - A general C++ function object (functor) with parameters
+### <a name="F5"></a> 5 - A general C++ function object (functor) with parameters
 
 A TF1 can be created from any C++ class implementing the operator()(double *x, double *p). The advantage of the function object is that he can have a state and reference therefore what-ever other object. In this way the user can customize his function.
 
@@ -342,7 +356,7 @@ TF1 * f = new TF1("f",[&](double*x, double *p){ return p[0]*g->Eval(x[0]); }, xm
 ~~~~
 
 
-### <a name="F5"></a> E - A member function with parameters of a general C++ class
+### <a name="F6"></a> 6 - A member function with parameters of a general C++ class
 
 A TF1 can be created in this case from any member function of a class which has the signature of (double * , double *) and returning a double.
 
@@ -435,7 +449,6 @@ TF1::TF1(const char *name,const char *formula, Double_t xmin, Double_t xmax) :
 
    DoInitialize();
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// F1 constructor using name of an interpreted function.
@@ -685,7 +698,9 @@ TF1::TF1(const TF1 &f1) :
    fNpfits(0), fNDF(0), fChisquare(0),
    fMinimum(-1111), fMaximum(-1111),
    fParent(0), fHistogram(0),
-   fMethodCall(0), fFormula(0), fParams(0)
+   fMethodCall(0),
+   fNormalized(false), fNormIntegral(0),
+   fFormula(0), fParams(0)
 {
    ((TF1&)f1).Copy(*this);
 }
@@ -747,6 +762,8 @@ void TF1::Copy(TObject &obj) const
    ((TF1&)obj).fSave      = fSave;
    ((TF1&)obj).fHistogram = 0;
    ((TF1&)obj).fMethodCall = 0;
+   ((TF1&)obj).fNormalized = fNormalized;
+   ((TF1&)obj).fNormIntegral = fNormIntegral;
    ((TF1&)obj).fFormula   = 0;
 
    if (fFormula) assert(fFormula->GetNpar() == fNpar);
@@ -769,7 +786,7 @@ void TF1::Copy(TObject &obj) const
    if (fParams) {
       TF1Parameters * paramsToCopy = ((TF1&)obj).fParams;
       if (paramsToCopy) *paramsToCopy = *fParams;
-      ((TF1&)obj).fParams = new TF1Parameters(*fParams);
+      else ((TF1&)obj).fParams = new TF1Parameters(*fParams);
    }
 }
 

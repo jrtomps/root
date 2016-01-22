@@ -507,11 +507,10 @@ PyObject* PyROOT::TCppObjectBySmartPtrExecutor::Execute(
    ObjectProxy* pyobj = (ObjectProxy*) BindCppObject(
       (void*)GILCallR( (Cppyy::TCppMethod_t)fDereferencer, value, ctxt ), fRawPtrType );
 
-   if ( pyobj )
+   if ( pyobj ) {
       pyobj->SetSmartPtr( (void*)value, fClass );
-
-// python ref counting will now control this object's life span
-   pyobj->HoldOn();
+      pyobj->HoldOn();  // life-time control by python ref-counting
+   }
 
    return (PyObject*)pyobj;
 }
@@ -843,6 +842,7 @@ namespace {
       NFp_t( "unsigned short*",    &CreateUShortArrayExecutor         ),
       NFp_t( "int*",               &CreateIntArrayExecutor            ),
       NFp_t( "unsigned int*",      &CreateUIntArrayExecutor           ),
+      NFp_t( "UInt_t*", /* enum */ &CreateUIntArrayExecutor           ),
       NFp_t( "long*",              &CreateLongArrayExecutor           ),
       NFp_t( "unsigned long*",     &CreateULongArrayExecutor          ),
       NFp_t( "float*",             &CreateFloatArrayExecutor          ),

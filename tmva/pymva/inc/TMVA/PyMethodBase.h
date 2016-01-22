@@ -38,10 +38,16 @@ class TH1D;
 struct _object;
 typedef _object PyObject;
 
+// needed by NPY_API_VERSION
+#include "numpy/numpyconfig.h"
+
+#if (NPY_API_VERSION >= 0x00000007 )
 struct tagPyArrayObject;
 typedef tagPyArrayObject PyArrayObject;
-//class PyObject;
-//class PyArrayObject;
+#else
+struct PyArrayObject;
+#endif
+
 
 namespace TMVA {
 
@@ -82,7 +88,9 @@ namespace TMVA {
       static TString Py_GetProgramName();
 
       static PyObject *Eval(TString code);//required to parse booking options from string to pyobjects
-
+      static void Serialize(TString file,PyObject *classifier);
+      static void UnSerialize(TString file,PyObject** obj);
+      
       virtual void     Train() = 0;
       // options treatment
       virtual void     Init()           = 0;
@@ -111,12 +119,18 @@ namespace TMVA {
    private:
 
       static PyObject *fModuleBuiltin;
-      static PyObject *fEval;
+      static PyObject *fEval;//eval funtion from python
+      static PyObject *fOpen;//open function for files
    protected:
       static PyObject *fModulePickle;  //Module for model persistence
       static PyObject *fPickleDumps;  //Function to dumps PyObject information into string
       static PyObject *fPickleLoads;  //Function to load PyObject information from string
 
+      static PyObject *fMain;//module __main__ to get namesapace local and global
+      static PyObject *fGlobalNS;//global namesapace
+      static PyObject *fLocalNS;//local namesapace
+
+      
       ClassDef(PyMethodBase, 0) // Virtual base class for all TMVA method
 
    };

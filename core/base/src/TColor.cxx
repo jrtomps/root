@@ -13,6 +13,8 @@
 #include "TROOT.h"
 #include "TColor.h"
 #include "TObjArray.h"
+#include "TArrayI.h"
+#include "TArrayD.h"
 #include "TVirtualPad.h"
 #include "TVirtualX.h"
 #include "TError.h"
@@ -22,60 +24,76 @@
 
 ClassImp(TColor)
 
-Bool_t  TColor::fgGrayscaleMode = kFALSE;
-Bool_t  TColor::fgInitDone = kFALSE;
-TArrayI TColor::fgPalette(0);
+namespace {
+   static Bool_t& TColor__GrayScaleMode() {
+      static Bool_t grayScaleMode;
+      return grayScaleMode;
+   }
+   static TArrayI& TColor__Palette() {
+      static TArrayI globalPalette(0);
+      return globalPalette;
+   }
+   static TArrayD& TColor__PalettesList() {
+      static TArrayD globalPalettesList(0);
+      return globalPalettesList;
+   }
+}
+
+static Int_t gHighestColorIndex = 0;
+
+#define fgGrayscaleMode TColor__GrayScaleMode()
+#define fgPalette TColor__Palette()
+#define fgPalettesList TColor__PalettesList()
 
 using std::floor;
 
-////////////////////////////////////////////////////////////////////////////////
+/** \class TColor
+The color creation and management class.
 
-/* Begin_Html
-<center><h2>The color creation and management class</h2></center>
+  - [Introduction](#C00)
+  - [Basic colors](#C01)
+  - [The color wheel](#C02)
+  - [Bright and dark colors](#C03)
+  - [Gray scale view of of canvas with colors](#C04)
+  - [Color palettes](#C05)
+  - [High quality predefined palettes](#C06)
+  - [Color transparency](#C07)
 
-<ul>
-<li><a href="#C00">Introduction</li></a>
-<li><a href="#C01">Basic colors</li></a>
-<li><a href="#C02">The color wheel</li></a>
-<li><a href="#C03">Bright and dark colors</li></a>
-<li><a href="#C04">Gray scale view of of canvas with colors</li></a>
-<li><a href="#C05">Color palettes</li></a>
-<li><a href="#C06">Color transparency</li></a>
-</ul>
-
-<a name="C00"></a><h3>Introduction</h3>
+## <a name="C00"></a> Introduction
 
 Colors are defined by their red, green and blue components, simply called the
 RGB components. The colors are also known by the hue, light and saturation
 components also known as the HLS components. When a new color is created the
 components of both color systems are computed.
-<p>
+
 At initialization time, a table of colors is generated. An existing color can
 be retrieved by its index:
-<br><pre>
+
+~~~ {.cpp}
    TColor *color = gROOT->GetColor(10);
-</pre>
-<br>Then it can be manipulated. For example its RGB components can be modified:
-<p>
-<pre>
+~~~
+
+Then it can be manipulated. For example its RGB components can be modified:
+
+~~~ {.cpp}
    color->SetRGB(0.1, 0.2, 0.3);
-</pre>
-<br>A new color can be created the following way:
-<p>
-<pre>
+~~~
+
+A new color can be created the following way:
+
+~~~ {.cpp}
    Int_t ci = 1756; // color index
    TColor *color = new TColor(ci, 0.1, 0.2, 0.3);
-</pre>
-<p>
-Two sets of colors are initialized;
-<ul>
-<li> The basic colors: colors with index from 0 to 50.
-<li> The color wheel: colors with indices from 300 to 1000.
-</ul>
+~~~
 
-<a name="C01"></a><h3>Basic colors</h3>
+Two sets of colors are initialized;
+
+  -  The basic colors: colors with index from 0 to 50.
+  -  The color wheel: colors with indices from 300 to 1000.
+
+## <a name="C01"></a> Basic colors
 The following image displays the 50 basic colors.
-End_Html
+
 Begin_Macro(source)
 {
    TCanvas *c = new TCanvas("c","Fill Area colors",0,0,500,200);
@@ -83,34 +101,32 @@ Begin_Macro(source)
    return c;
 }
 End_Macro
-Begin_Html
 
-<a name="C02"></a><h3>The color wheel</h3>
+## <a name="C02"></a> The color wheel
 The wheel contains the recommended 216 colors to be used in web applications.
 
-The colors in the color wheel are created by <tt>TColor::CreateColorWheel</tt>.
-<p>
+The colors in the color wheel are created by `TColor::CreateColorWheel`.
+
 Using this color set for your text, background or graphics will give your
 application a consistent appearance across different platforms and browsers.
-<p>
+
 Colors are grouped by hue, the aspect most important in human perception.
 Touching color chips have the same hue, but with different brightness and
 vividness.
-<p>
-Colors of slightly different hues <b>clash</b>. If you intend to display
+
+Colors of slightly different hues clash. If you intend to display
 colors of the same hue together, you should pick them from the same group.
-<p>
+
 Each color chip is identified by a mnemonic (e.g. kYellow) and a number.
 The keywords, kRed, kBlue, kYellow, kPink, etc are defined in the header file
-<b>Rtypes.h</b> that is included in all ROOT other header files. It is better
+Rtypes.h that is included in all ROOT other header files. It is better
 to use these keywords in user code instead of hardcoded color numbers, e.g.:
-<pre>
+~~~ {.cpp}
    myObject.SetFillColor(kRed);
    myObject.SetFillColor(kYellow-10);
    myLine.SetLineColor(kMagenta+2);
-</pre>
+~~~
 
-End_Html
 Begin_Macro(source)
 {
    TColorWheel *w = new TColorWheel();
@@ -118,31 +134,28 @@ Begin_Macro(source)
    return w->GetCanvas();
 }
 End_Macro
-Begin_Html
 
-<a name="C03"></a><h3>Bright and dark colors</h3>
+## <a name="C03"></a> Bright and dark colors
 The dark and bright color are used to give 3-D effects when drawing various
 boxes (see TWbox, TPave, TPaveText, TPaveLabel, etc).
-<ul>
-   <li>The dark colors have an index = color_index+100
-   <li>The bright colors have an index = color_index+150
-   <li>Two static functions return the bright and dark color number
-       corresponding to a color index. If the bright or dark color does not
-       exist, they are created:
-   <pre>
+
+  - The dark colors have an index = color_index+100
+  - The bright colors have an index = color_index+150
+  - Two static functions return the bright and dark color number
+    corresponding to a color index. If the bright or dark color does not
+    exist, they are created:
+   ~~~ {.cpp}
       Int_t dark   = TColor::GetColorDark(color_index);
       Int_t bright = TColor::GetColorBright(color_index);
-   </pre>
-</ul>
+   ~~~
 
-<a name="C04"></a><h3>Grayscale view of of canvas with colors</h3>
+## <a name="C04"></a> Grayscale view of of canvas with colors
 One can toggle between a grayscale preview and the regular colored mode using
-<tt>TCanvas::SetGrayscale()</tt>. Note that in grayscale mode, access via RGB
+`TCanvas::SetGrayscale()`. Note that in grayscale mode, access via RGB
 will return grayscale values according to ITU standards (and close to b&w
-printer grayscales), while access via HLS returns de-saturated grayscales. The
+printer gray-scales), while access via HLS returns de-saturated gray-scales. The
 image below shows the ROOT color wheel in grayscale mode.
 
-End_Html
 Begin_Macro(source)
 {
    TColorWheel *w = new TColorWheel();
@@ -153,22 +166,20 @@ Begin_Macro(source)
    return w->GetCanvas();
 }
 End_Macro
-Begin_Html
 
-<a name="C05"></a><h3>Color palettes</h3>
+## <a name="C05"></a> Color palettes
 It is often very useful to represent a variable with a color map. The concept
 of "color palette" allows to do that. One color palette is active at any time.
 This "current palette" is set using:
-<p>
-<pre>
+
+~~~ {.cpp}
 gStyle->SetPalette(...);
-</pre>
-<p>
+~~~
+
 This function has two parameters: the number of colors in the palette and an
 array of containing the indices of colors in the palette. The following small
 example demonstrates how to define and use the color palette:
 
-End_Html
 Begin_Macro(source)
 {
    TCanvas *c1  = new TCanvas("c1","c1",0,0,600,400);
@@ -184,13 +195,11 @@ Begin_Macro(source)
    return c1;
 }
 End_Macro
-Begin_Html
 
-<p> To define more a complex palette with a continuous gradient of color, one
-should use the static function <tt>TColor::CreateGradientColorTable()</tt>.
+ To define more a complex palette with a continuous gradient of color, one
+should use the static function `TColor::CreateGradientColorTable()`.
 The following example demonstrates how to proceed:
 
-End_Html
 Begin_Macro(source)
 {
    TCanvas *c2  = new TCanvas("c2","c2",0,0,600,400);
@@ -209,17 +218,16 @@ Begin_Macro(source)
    return c2;
 }
 End_Macro
-Begin_Html
 
-<p>The function <tt>TColor::CreateGradientColorTable()</tt> automatically
-calls </tt>gStyle->SetPalette()</tt>, so there is not need to add one.
-<p>
-After a call to <tt>TColor::CreateGradientColorTable()</tt> it is sometimes
+The function `TColor::CreateGradientColorTable()` automatically
+calls `gStyle->SetPalette()`, so there is not need to add one.
+
+After a call to `TColor::CreateGradientColorTable()` it is sometimes
 useful to store the newly create palette for further use. In particular, it is
 recommended to do if one wants to switch between several user define palettes.
 To store a palette in an array it is enough to do:
-<br>
-<pre>
+
+~~~ {.cpp}
    Int_t MyPalette[100];
    Double_t r[]    = {0., 0.0, 1.0, 1.0, 1.0};
    Double_t g[]    = {0., 0.0, 0.0, 1.0, 1.0};
@@ -227,96 +235,699 @@ To store a palette in an array it is enough to do:
    Double_t stop[] = {0., .25, .50, .75, 1.0};
    Int_t FI = TColor::CreateGradientColorTable(5, stop, r, g, b, 100);
    for (int i=0;i<100;i++) MyPalette[i] = FI+i;
-</pre>
-<p>
-Later on to reuse the palette <tt>MyPalette</tt> it will be enough to do
-<p>
-<pre>
+~~~
+
+Later on to reuse the palette `MyPalette` it will be enough to do
+
+~~~ {.cpp}
    gStyle->SetPalette(100, MyPalette);
-</pre>
-<p>
-As only one palette is active, one need to use <tt>TExec</tt> to be able to
+~~~
+
+As only one palette is active, one need to use `TExec` to be able to
 display plots using different palettes on the same pad.
 The following macro illustrate this feature.
-End_Html
+
 Begin_Macro(source)
 ../../../tutorials/graphs/multipalette.C
 End_Macro
-Begin_Html
 
-<a name="C06"></a><h3>Color transparency</h3>
+## <a name="C06"></a> High quality predefined palettes
+
+62 high quality palettes are predefined with 255 colors each.
+These palettes can be accessed "by name" with gStyle->SetPalette(num).
+`num` can be taken within the following enum:
+
+~~~ {.cpp}
+kDeepSea=51,          kGreyScale=52,    kDarkBodyRadiator=53,
+kBlueYellow= 54,      kRainBow=55,      kInvertedDarkBodyRadiator=56,
+kBird=57,             kCubehelix=58,    kGreenRedViolet=59,
+kBlueRedYellow=60,    kOcean=61,        kColorPrintableOnGrey=62,
+kAlpine=63,           kAquamarine=64,   kArmy=65,
+kAtlantic=66,         kAurora=67,       kAvocado=68,
+kBeach=69,            kBlackBody=70,    kBlueGreenYellow=71,
+kBrownCyan=72,        kCMYK=73,         kCandy=74,
+kCherry=75,           kCoffee=76,       kDarkRainBow=77,
+kDarkTerrain=78,      kFall=79,         kFruitPunch=80,
+kFuchsia=81,          kGreyYellow=82,   kGreenBrownTerrain=83,
+kGreenPink=84,        kIsland=85,       kLake=86,
+kLightTemperature=87, kLightTerrain=88, kMint=89,
+kNeon=90,             kPastel=91,       kPearl=92,
+kPigeon=93,           kPlum=94,         kRedBlue=95,
+kRose=96,             kRust=97,         kSandyTerrain=98,
+kSienna=99,           kSolar=100,       kSouthWest=101,
+kStarryNight=102,     kSunset=103,      kTemperatureMap=104,
+kThermometer=105,     kValentine=106,   kVisibleSpectrum=107,
+kWaterMelon=108,      kCool=109,        kCopper=110,
+kGistEarth=111,       kViridis=112
+~~~
+
+<table border=0>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kDeepSea);
+   f2->Draw("surf2Z"); f2->SetTitle("kDeepSea");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kGreyScale);
+   f2->Draw("surf2Z"); f2->SetTitle("kGreyScale");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kDarkBodyRadiator);
+   f2->Draw("surf2Z"); f2->SetTitle("kDarkBodyRadiator");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kBlueYellow);
+   f2->Draw("surf2Z"); f2->SetTitle("kBlueYellow");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kRainBow);
+   f2->Draw("surf2Z"); f2->SetTitle("kRainBow");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kInvertedDarkBodyRadiator);
+   f2->Draw("surf2Z"); f2->SetTitle("kInvertedDarkBodyRadiator");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kBird);
+   f2->Draw("surf2Z"); f2->SetTitle("kBird (default)");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCubehelix);
+   f2->Draw("surf2Z"); f2->SetTitle("kCubehelix");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kGreenRedViolet);
+   f2->Draw("surf2Z"); f2->SetTitle("kGreenRedViolet");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kBlueRedYellow);
+   f2->Draw("surf2Z"); f2->SetTitle("kBlueRedYellow");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kOcean);
+   f2->Draw("surf2Z"); f2->SetTitle("kOcean");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kColorPrintableOnGrey);
+   f2->Draw("surf2Z"); f2->SetTitle("kColorPrintableOnGrey");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kAlpine);
+   f2->Draw("surf2Z"); f2->SetTitle("kAlpine");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kAquamarine);
+   f2->Draw("surf2Z"); f2->SetTitle("kAquamarine");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kArmy);
+   f2->Draw("surf2Z"); f2->SetTitle("kArmy");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kAtlantic);
+   f2->Draw("surf2Z"); f2->SetTitle("kAtlantic");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kAurora);
+   f2->Draw("surf2Z"); f2->SetTitle("kAurora");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kAvocado);
+   f2->Draw("surf2Z"); f2->SetTitle("kAvocado");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kBeach);
+   f2->Draw("surf2Z"); f2->SetTitle("kBeach");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kBlackBody);
+   f2->Draw("surf2Z"); f2->SetTitle("kBlackBody");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kBlueGreenYellow);
+   f2->Draw("surf2Z"); f2->SetTitle("kBlueGreenYellow");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kBrownCyan);
+   f2->Draw("surf2Z"); f2->SetTitle("kBrownCyan");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCMYK);
+   f2->Draw("surf2Z"); f2->SetTitle("kCMYK");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCandy);
+   f2->Draw("surf2Z"); f2->SetTitle("kCandy");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCherry);
+   f2->Draw("surf2Z"); f2->SetTitle("kCherry");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCoffee);
+   f2->Draw("surf2Z"); f2->SetTitle("kCoffee");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kDarkRainBow);
+   f2->Draw("surf2Z"); f2->SetTitle("kDarkRainBow");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kDarkTerrain);
+   f2->Draw("surf2Z"); f2->SetTitle("kDarkTerrain");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kFall);
+   f2->Draw("surf2Z"); f2->SetTitle("kFall");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kFruitPunch);
+   f2->Draw("surf2Z"); f2->SetTitle("kFruitPunch");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kFuchsia);
+   f2->Draw("surf2Z"); f2->SetTitle("kFuchsia");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kGreyYellow);
+   f2->Draw("surf2Z"); f2->SetTitle("kGreyYellow");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kGreenBrownTerrain);
+   f2->Draw("surf2Z"); f2->SetTitle("kGreenBrownTerrain");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kGreenPink);
+   f2->Draw("surf2Z"); f2->SetTitle("kGreenPink");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kIsland);
+   f2->Draw("surf2Z"); f2->SetTitle("kIsland");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kLake);
+   f2->Draw("surf2Z"); f2->SetTitle("kLake");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kLightTemperature);
+   f2->Draw("surf2Z"); f2->SetTitle("kLightTemperature");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kLightTerrain);
+   f2->Draw("surf2Z"); f2->SetTitle("kLightTerrain");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kMint);
+   f2->Draw("surf2Z"); f2->SetTitle("kMint");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kNeon);
+   f2->Draw("surf2Z"); f2->SetTitle("kNeon");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kPastel);
+   f2->Draw("surf2Z"); f2->SetTitle("kPastel");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kPearl);
+   f2->Draw("surf2Z"); f2->SetTitle("kPearl");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kPigeon);
+   f2->Draw("surf2Z"); f2->SetTitle("kPigeon");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kPlum);
+   f2->Draw("surf2Z"); f2->SetTitle("kPlum");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kRedBlue);
+   f2->Draw("surf2Z"); f2->SetTitle("kRedBlue");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kRose);
+   f2->Draw("surf2Z"); f2->SetTitle("kRose");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kRust);
+   f2->Draw("surf2Z"); f2->SetTitle("kRust");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kSandyTerrain);
+   f2->Draw("surf2Z"); f2->SetTitle("kSandyTerrain");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kSienna);
+   f2->Draw("surf2Z"); f2->SetTitle("kSienna");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kSolar);
+   f2->Draw("surf2Z"); f2->SetTitle("kSolar");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kSouthWest);
+   f2->Draw("surf2Z"); f2->SetTitle("kSouthWest");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kStarryNight);
+   f2->Draw("surf2Z"); f2->SetTitle("kStarryNight");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kSunset);
+   f2->Draw("surf2Z"); f2->SetTitle("kSunset");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kTemperatureMap);
+   f2->Draw("surf2Z"); f2->SetTitle("kTemperatureMap");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kThermometer);
+   f2->Draw("surf2Z"); f2->SetTitle("kThermometer");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kValentine);
+   f2->Draw("surf2Z"); f2->SetTitle("kValentine");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kVisibleSpectrum);
+   f2->Draw("surf2Z"); f2->SetTitle("kVisibleSpectrum");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kWaterMelon);
+   f2->Draw("surf2Z"); f2->SetTitle("kWaterMelon");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCool);
+   f2->Draw("surf2Z"); f2->SetTitle("kCool");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kCopper);
+   f2->Draw("surf2Z"); f2->SetTitle("kCopper");
+}
+End_Macro
+</td></tr>
+<tr><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kGistEarth);
+   f2->Draw("surf2Z"); f2->SetTitle("kGistEarth");
+}
+End_Macro
+</td><td>
+Begin_Macro
+{
+   c  = new TCanvas("c","c",0,0,300,300);
+   TF2 *f2 = new TF2("f2","0.1+(1-(x-2)*(x-2))*(1-(y-2)*(y-2))",0.999,3.002,0.999,3.002);
+   f2->SetContour(99); gStyle->SetPalette(kViridis);
+   f2->Draw("surf2Z"); f2->SetTitle("kViridis");
+}
+End_Macro
+</td></tr>
+</table>
+
+## <a name="C07"></a> Color transparency
 To make a graphics object transparent it is enough to set its color to a
 transparent one. The color transparency is defined via its alpha component. The
-alpha value varies from <tt>0.</tt> (fully transparent) to <tt>1.</tt> (fully
+alpha value varies from `0.` (fully transparent) to `1.` (fully
 opaque). To set the alpha value of an existing color it is enough to do:
-<p>
-<pre>
+
+~~~ {.cpp}
    TColor *col26 = gROOT->GetColor(26);
    col26->SetAlpha(0.01);
-</pre>
-<p>
+~~~
+
 A new color can be created transparent the following way:
-<p>
-<pre>
+
+~~~ {.cpp}
    Int_t ci = 1756;
    TColor *color = new TColor(ci, 0.1, 0.2, 0.3, "", 0.5); // alpha = 0.5
-</pre>
-<p>
-An example of tranparency usage with parallel coordinates can be found
-in <tt>$ROOTSYS/tutorials/tree/parallelcoordtrans.C</tt>.
-<p>
-To ease the creation of a transparent color the static method
-<tt>GetColorTransparent(Int_t color, Float_t a)</tt> is provided.
-In the following example the <tt>trans_red</tt> color index point to
-a red color 30% transparent. The alpha value of the color index
-<tt>kRed</tt> is not modified.
-<p>
-<pre>
-   Int_t trans_red = GetColorTransparent(kRed, 0.3);
-</pre>
-<p>
-This function is also used in the methods
-<tt>SetFillColorAlpha()</tt>, <tt>SetLineColorAlpha()</tt>,
-<tt>SetMarkerColorAlpha()</tt> and <tt>SetTextColorAlpha()</tt>.
-In the following example the fill color of the histogram <tt>histo</tt>
-is set to blue with a transparency of 35%. The color <tt>kBlue</tt>
-itself remains fully opaque.
-<p>
-<pre>
-   histo->SetFillColorAlpha(kBlue, 0.35);
-</pre>
-<p>
-The transparency is available on all platforms when the <tt>flagOpenGL.CanvasPreferGL</tt> is set to <tt>1</tt>
-in <tt>$ROOTSYS/etc/system.rootrc</tt>, or on Mac with the Cocoa backend. On the file output
-it is visible with PDF, PNG, Gif, JPEG, SVG ... but not PostScript.
-End_Html */
+~~~
 
+An example of transparency usage with parallel coordinates can be found
+in `$ROOTSYS/tutorials/tree/parallelcoordtrans.C`.
+
+To ease the creation of a transparent color the static method
+`GetColorTransparent(Int_t color, Float_t a)` is provided.
+In the following example the `trans_red` color index point to
+a red color 30% transparent. The alpha value of the color index
+`kRed` is not modified.
+
+~~~ {.cpp}
+   Int_t trans_red = GetColorTransparent(kRed, 0.3);
+~~~
+
+This function is also used in the methods
+`SetFillColorAlpha()`, `SetLineColorAlpha()`,
+`SetMarkerColorAlpha()` and `SetTextColorAlpha()`.
+In the following example the fill color of the histogram `histo`
+is set to blue with a transparency of 35%. The color `kBlue`
+itself remains fully opaque.
+
+~~~ {.cpp}
+   histo->SetFillColorAlpha(kBlue, 0.35);
+~~~
+
+The transparency is available on all platforms when the `flagOpenGL.CanvasPreferGL` is set to `1`
+in `$ROOTSYS/etc/system.rootrc`, or on Mac with the Cocoa backend. On the file output
+it is visible with PDF, PNG, Gif, JPEG, SVG ... but not PostScript.
+ */
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Default constructor.
 
 TColor::TColor(): TNamed()
 {
-   /* Begin_html
-   Default constructor.
-   End_html */
-
    fNumber = -1;
    fRed = fGreen = fBlue = fHue = fLight = fSaturation = -1;
    fAlpha = 1;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Normal color constructor. Initialize a color structure.
+/// Compute the RGB and HLS color components.
 
 TColor::TColor(Int_t color, Float_t r, Float_t g, Float_t b, const char *name,
                Float_t a)
       : TNamed(name,"")
 {
-   /* Begin_html
-   Normal color constructor. Initialize a color structure.
-   Compute the RGB and HLS color components.
-   End_html */
-
    TColor::InitializeColors();
    // do not enter if color number already exist
    TColor *col = gROOT->GetColor(color);
@@ -335,6 +946,8 @@ TColor::TColor(Int_t color, Float_t r, Float_t g, Float_t b, const char *name,
 
    fNumber = color;
 
+   if (fNumber > gHighestColorIndex) gHighestColorIndex = fNumber;
+
    char aname[32];
    if (!name || !*name) {
       snprintf(aname,32, "Color%d", color);
@@ -350,44 +963,53 @@ TColor::TColor(Int_t color, Float_t r, Float_t g, Float_t b, const char *name,
    fAlpha = a;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Fast TColor constructor. It creates a color with an index just above the
+/// current highest one. It does not name the color.
+/// This is useful to create palettes.
+
+TColor::TColor(Float_t r, Float_t g, Float_t b, Float_t a): TNamed("","")
+{
+   gHighestColorIndex++;
+   fNumber = gHighestColorIndex;
+   fRed    = r;
+   fGreen  = g;
+   fBlue   = b;
+   fAlpha  = a;
+
+   // enter in the list of colors
+   TObjArray *lcolors = (TObjArray*)gROOT->GetListOfColors();
+   lcolors->AddAtAndExpand(this, fNumber);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Color destructor.
 
 TColor::~TColor()
 {
-   /* Begin_html
-   Color destructor.
-   End_html */
-
    gROOT->GetListOfColors()->Remove(this);
    if (gROOT->GetListOfColors()->GetEntries() == 0) {fgPalette.Set(0); fgPalette=0;}
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Color copy constructor.
 
 TColor::TColor(const TColor &color) : TNamed(color)
 {
-   /* Begin_html
-   Color copy constructor.
-   End_html */
-
    ((TColor&)color).Copy(*this);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Initialize colors used by the TCanvas based graphics (via TColor objects).
+/// This method should be called before the ApplicationImp is created (which
+/// initializes the GUI colors).
 
 void TColor::InitializeColors()
 {
-   /* Begin_html
-   Initialize colors used by the TCanvas based graphics (via TColor objects).
-   This method should be called before the ApplicationImp is created (which
-   initializes the GUI colors).
-   End_html */
+   static Bool_t initDone = kFALSE;
 
-   if (fgInitDone) return;
-   fgInitDone = kTRUE;
+   if (initDone) return;
+   initDone = kTRUE;
 
    if (gROOT->GetListOfColors()->First() == 0) {
 
@@ -503,17 +1125,13 @@ void TColor::InitializeColors()
    if (!fgPalette.fN) SetPalette(1,0);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Return color as hexadecimal string. This string can be directly passed
+/// to, for example, TGClient::GetColorByName(). String will be reused so
+/// copy immediately if needed.
 
 const char *TColor::AsHexString() const
 {
-   /* Begin_html
-   Return color as hexadecimal string. This string can be directly passed
-   to, for example, TGClient::GetColorByName(). String will be reused so
-   copy immediately if needed.
-   End_html */
-
    static TString tempbuf;
 
    Int_t r, g, b, a;
@@ -530,15 +1148,11 @@ const char *TColor::AsHexString() const
    return tempbuf;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Copy this color to obj.
 
 void TColor::Copy(TObject &obj) const
 {
-   /* Begin_html
-   Copy this color to obj.
-   End_html */
-
    TNamed::Copy((TNamed&)obj);
    ((TColor&)obj).fRed   = fRed;
    ((TColor&)obj).fGreen = fGreen;
@@ -550,15 +1164,11 @@ void TColor::Copy(TObject &obj) const
    ((TColor&)obj).fNumber = fNumber;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Create the Gray scale colors in the Color Wheel
 
 void TColor::CreateColorsGray()
 {
-   /* Begin_html
-   Create the Gray scale colors in the Color Wheel
-   End_html */
-
    if (gROOT->GetColor(kGray)) return;
    TColor *gray  = new TColor(kGray,204./255.,204./255.,204./255.);
    TColor *gray1 = new TColor(kGray+1,153./255.,153./255.,153./255.);
@@ -570,15 +1180,11 @@ void TColor::CreateColorsGray()
    gray3->SetName("kGray+3");
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Create the "circle" colors in the color wheel.
 
 void TColor::CreateColorsCircle(Int_t offset, const char *name, UChar_t *rgb)
 {
-   /* Begin_html
-   Create the "circle" colors in the color wheel.
-   End_html */
-
    TString colorname;
    for (Int_t n=0;n<15;n++) {
       Int_t colorn = offset+n-10;
@@ -594,15 +1200,11 @@ void TColor::CreateColorsCircle(Int_t offset, const char *name, UChar_t *rgb)
    }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Create the "rectangular" colors in the color wheel.
 
 void TColor::CreateColorsRectangle(Int_t offset, const char *name, UChar_t *rgb)
 {
-   /* Begin_html
-   Create the "rectangular" colors in the color wheel.
-   End_html */
-
    TString colorname;
    for (Int_t n=0;n<20;n++) {
       Int_t colorn = offset+n-9;
@@ -618,15 +1220,11 @@ void TColor::CreateColorsRectangle(Int_t offset, const char *name, UChar_t *rgb)
    }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function steering the creation of all colors in the color wheel.
 
 void TColor::CreateColorWheel()
 {
-   /* Begin_html
-   Static function steering the creation of all colors in the color wheel.
-   End_html */
-
    UChar_t magenta[46]= {255,204,255
                         ,255,153,255, 204,153,204
                         ,255,102,255, 204,102,204, 153,102,153
@@ -710,15 +1308,11 @@ void TColor::CreateColorWheel()
    TColor::CreateColorsGray();
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function returning the color number i in current palette.
 
 Int_t TColor::GetColorPalette(Int_t i)
 {
-   /* Begin_html
-   Static function returning the color number i in current palette.
-   End_html */
-
    Int_t ncolors = fgPalette.fN;
    if (ncolors == 0) return 0;
    Int_t icol    = i%ncolors;
@@ -726,29 +1320,21 @@ Int_t TColor::GetColorPalette(Int_t i)
    return fgPalette.fArray[icol];
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function returning number of colors in the color palette.
 
 Int_t TColor::GetNumberOfColors()
 {
-   /* Begin_html
-   Static function returning number of colors in the color palette.
-   End_html */
-
    return fgPalette.fN;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Return pixel value corresponding to this color. This pixel value can
+/// be used in the GUI classes. This call does not work in batch mode since
+/// it needs to communicate with the graphics system.
 
 ULong_t TColor::GetPixel() const
 {
-   /* Begin_html
-   Return pixel value corresponding to this color. This pixel value can
-   be used in the GUI classes. This call does not work in batch mode since
-   it needs to communicate with the graphics system.
-   End_html */
-
    if (gVirtualX && !gROOT->IsBatch()) {
       if (gApplication) {
          TApplication::NeedGraphicsLibs();
@@ -760,16 +1346,13 @@ ULong_t TColor::GetPixel() const
    return 0;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method to compute RGB from HLS. The l and s are between [0,1]
+/// and h is between [0,360]. The returned r,g,b triplet is between [0,1].
 
 void TColor::HLS2RGB(Float_t hue, Float_t light, Float_t satur,
                      Float_t &r, Float_t &g, Float_t &b)
 {
-   /* Begin_html
-   Static method to compute RGB from HLS. The l and s are between [0,1]
-   and h is between [0,360]. The returned r,g,b triplet is between [0,1].
-   End_html */
 
    Float_t rh, rl, rs, rm1, rm2;
    rh = rl = rs = 0;
@@ -789,15 +1372,11 @@ void TColor::HLS2RGB(Float_t hue, Float_t light, Float_t satur,
    b = HLStoRGB1(rm1, rm2, rh-120);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method. Auxiliary to HLS2RGB().
 
 Float_t TColor::HLStoRGB1(Float_t rn1, Float_t rn2, Float_t huei)
 {
-   /* Begin_html
-   Static method. Auxiliary to HLS2RGB().
-   End_html */
-
    Float_t hue = huei;
    if (hue > 360) hue = hue - 360;
    if (hue < 0)   hue = hue + 360;
@@ -807,16 +1386,12 @@ Float_t TColor::HLStoRGB1(Float_t rn1, Float_t rn2, Float_t huei)
    return rn1;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method to compute RGB from HLS. The h,l,s are between [0,255].
+/// The returned r,g,b triplet is between [0,255].
 
 void TColor::HLS2RGB(Int_t h, Int_t l, Int_t s, Int_t &r, Int_t &g, Int_t &b)
 {
-   /* Begin_html
-   Static method to compute RGB from HLS. The h,l,s are between [0,255].
-   The returned r,g,b triplet is between [0,255].
-   End_html */
-
    Float_t hh, ll, ss, rr, gg, bb;
 
    hh = Float_t(h) * 360 / 255;
@@ -830,24 +1405,20 @@ void TColor::HLS2RGB(Int_t h, Int_t l, Int_t s, Int_t &r, Int_t &g, Int_t &b)
    b = (Int_t) (bb * 255);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method to compute RGB from HSV:
+///
+///  -  The hue value runs from 0 to 360.
+///  -  The saturation is the degree of strength or purity and is from 0 to 1.
+///     Purity is how much white is added to the color, so S=1 makes the purest
+///     color (no white).
+///  -  Brightness value also ranges from 0 to 1, where 0 is the black.
+///
+/// The returned r,g,b triplet is between [0,1].
 
 void TColor::HSV2RGB(Float_t hue, Float_t satur, Float_t value,
                      Float_t &r, Float_t &g, Float_t &b)
 {
-   /* Begin_html
-   Static method to compute RGB from HSV:
-   <ul>
-   <li> The hue value runs from 0 to 360.
-   <li> The saturation is the degree of strength or purity and is from 0 to 1.
-        Purity is how much white is added to the color, so S=1 makes the purest
-        color (no white).
-   <li> Brightness value also ranges from 0 to 1, where 0 is the black.
-   </ul>
-   The returned r,g,b triplet is between [0,1].
-   End_html */
-
    Int_t i;
    Float_t f, p, q, t;
 
@@ -898,42 +1469,30 @@ void TColor::HSV2RGB(Float_t hue, Float_t satur, Float_t value,
    }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// List this color with its attributes.
 
 void TColor::ls(Option_t *) const
 {
-   /* Begin_html
-   List this color with its attributes.
-   End_html */
-
-   printf("Color:%d  Red=%f Green=%f Blue=%f Name=%s\n",
-          fNumber, fRed, fGreen, fBlue, GetName());
+   printf("Color:%d  Red=%f Green=%f Blue=%f Alpha=%f Name=%s\n",
+          fNumber, fRed, fGreen, fBlue, fAlpha, GetName());
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Dump this color with its attributes.
 
 void TColor::Print(Option_t *) const
 {
-   /* Begin_html
-   Dump this color with its attributes.
-   End_html */
-
    ls();
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method to compute HLS from RGB. The r,g,b triplet is between
+/// [0,1], hue is between [0,360], light and satur are [0,1].
 
 void TColor::RGB2HLS(Float_t rr, Float_t gg, Float_t bb,
                      Float_t &hue, Float_t &light, Float_t &satur)
 {
-   /* Begin_html
-   Static method to compute HLS from RGB. The r,g,b triplet is between
-   [0,1], hue is between [0,360], light and satur are [0,1].
-   End_html */
-
    Float_t rnorm, gnorm, bnorm, minval, maxval, msum, mdiff, r, g, b;
    minval = maxval =0 ;
    r = g = b = 0;
@@ -977,30 +1536,21 @@ void TColor::RGB2HLS(Float_t rr, Float_t gg, Float_t bb,
       hue = hue - 360;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method to compute HSV from RGB.
+///
+///  -  The input values:
+///    -  r,g,b triplet is between [0,1].
+///  -  The returned values:
+///    -  The hue value runs from 0 to 360.
+///    -  The saturation is the degree of strength or purity and is from 0 to 1.
+///       Purity is how much white is added to the color, so S=1 makes the purest
+///       color (no white).
+///    -  Brightness value also ranges from 0 to 1, where 0 is the black.
 
 void TColor::RGB2HSV(Float_t r, Float_t g, Float_t b,
                      Float_t &hue, Float_t &satur, Float_t &value)
 {
-   /* Begin_html
-   Static method to compute HSV from RGB.
-   <ul>
-   <li> The input values:
-   <ul>
-   <li> r,g,b triplet is between [0,1].
-   </ul>
-   <li> The returned values:
-   <ul>
-   <li> The hue value runs from 0 to 360.
-   <li> The saturation is the degree of strength or purity and is from 0 to 1.
-        Purity is how much white is added to the color, so S=1 makes the purest
-        color (no white).
-   <li> Brightness value also ranges from 0 to 1, where 0 is the black.
-   </ul>
-   </ul>
-   End_html */
-
    Float_t min, max, delta;
 
    min   = TMath::Min(TMath::Min(r, g), b);
@@ -1029,16 +1579,12 @@ void TColor::RGB2HSV(Float_t r, Float_t g, Float_t b,
    if (hue < 0) hue += 360;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method to compute HLS from RGB. The r,g,b triplet is between
+/// [0,255], hue, light and satur are between [0,255].
 
 void TColor::RGB2HLS(Int_t r, Int_t g, Int_t b, Int_t &h, Int_t &l, Int_t &s)
 {
-   /* Begin_html
-   Static method to compute HLS from RGB. The r,g,b triplet is between
-   [0,255], hue, light and satur are between [0,255].
-   End_html */
-
    Float_t rr, gg, bb, hue, light, satur;
 
    rr = Float_t(r) / 255;
@@ -1052,15 +1598,11 @@ void TColor::RGB2HLS(Int_t r, Int_t g, Int_t b, Int_t &h, Int_t &l, Int_t &s)
    s = (Int_t) (satur * 255);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Initialize this color and its associated colors.
 
 void TColor::SetRGB(Float_t r, Float_t g, Float_t b)
 {
-   /* Begin_html
-   Initialize this color and its associated colors.
-   End_html */
-
    TColor::InitializeColors();
    fRed   = r;
    fGreen = g;
@@ -1102,34 +1644,26 @@ void TColor::SetRGB(Float_t r, Float_t g, Float_t b)
    }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Make this color known to the graphics system.
 
 void TColor::Allocate()
 {
-   /* Begin_html
-   Make this color known to the graphics system.
-   End_html */
-
    if (gVirtualX && !gROOT->IsBatch())
 
       gVirtualX->SetRGB(fNumber, GetRed(), GetGreen(), GetBlue());
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method returning color number for color specified by
+/// hex color string of form: "#rrggbb", where rr, gg and bb are in
+/// hex between [0,FF], e.g. "#c0c0c0".
+///
+/// If specified color does not exist it will be created with as
+/// name "#rrggbb" with rr, gg and bb in hex between [0,FF].
 
 Int_t TColor::GetColor(const char *hexcolor)
 {
-   /* Begin_html
-   Static method returning color number for color specified by
-   hex color string of form: #rrggbb, where rr, gg and bb are in
-   hex between [0,FF], e.g. "#c0c0c0".
-   <br>
-   If specified color does not exist it will be created with as
-   name "#rrggbb" with rr, gg and bb in hex between [0,FF].
-   End_html */
-
    if (hexcolor && *hexcolor == '#') {
       Int_t r, g, b;
       if (sscanf(hexcolor+1, "%02x%02x%02x", &r, &g, &b) == 3)
@@ -1139,20 +1673,16 @@ Int_t TColor::GetColor(const char *hexcolor)
    return 0;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method returning color number for color specified by
+/// r, g and b. The r,g,b should be in the range [0,1].
+///
+/// If specified color does not exist it will be created
+/// with as name "#rrggbb" with rr, gg and bb in hex between
+/// [0,FF].
 
 Int_t TColor::GetColor(Float_t r, Float_t g, Float_t b)
 {
-   /* Begin_html
-   Static method returning color number for color specified by
-   r, g and b. The r,g,b should be in the range [0,1].
-   <br>
-   If specified color does not exist it will be created
-   with as name "#rrggbb" with rr, gg and bb in hex between
-   [0,FF].
-   End_html */
-
    Int_t rr, gg, bb;
    rr = Int_t(r * 255);
    gg = Int_t(g * 255);
@@ -1161,17 +1691,13 @@ Int_t TColor::GetColor(Float_t r, Float_t g, Float_t b)
    return GetColor(rr, gg, bb);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method returning color number for color specified by
+/// system dependent pixel value. Pixel values can be obtained, e.g.,
+/// from the GUI color picker.
 
 Int_t TColor::GetColor(ULong_t pixel)
 {
-   /* Begin_html
-   Static method returning color number for color specified by
-   system dependent pixel value. Pixel values can be obtained, e.g.,
-   from the GUI color picker.
-   End_html */
-
    Int_t r, g, b;
 
    Pixel2RGB(pixel, r, g, b);
@@ -1179,19 +1705,15 @@ Int_t TColor::GetColor(ULong_t pixel)
    return GetColor(r, g, b);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method returning color number for color specified by
+/// r, g and b. The r,g,b should be in the range [0,255].
+/// If the specified color does not exist it will be created
+/// with as name "#rrggbb" with rr, gg and bb in hex between
+/// [0,FF].
 
 Int_t TColor::GetColor(Int_t r, Int_t g, Int_t b)
 {
-   /* Begin_html
-   Static method returning color number for color specified by
-   r, g and b. The r,g,b should be in the range [0,255].
-   If the specified color does not exist it will be created
-   with as name "#rrggbb" with rr, gg and bb in hex between
-   [0,FF].
-   End_html */
-
    TColor::InitializeColors();
    if (r < 0) r = 0;
    if (g < 0) g = 0;
@@ -1245,17 +1767,13 @@ Int_t TColor::GetColor(Int_t r, Int_t g, Int_t b)
    return color->GetNumber();
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function: Returns the bright color number corresponding to n
+/// If the TColor object does not exist, it is created.
+/// The convention is that the bright color nb = n+150
 
 Int_t TColor::GetColorBright(Int_t n)
 {
-   /* Begin_html
-   Static function: Returns the bright color number corresponding to n
-   If the TColor object does not exist, it is created.
-   The convention is that the bright color nb = n+150
-   End_html */
-
    if (n < 0) return -1;
 
    // Get list of all defined colors
@@ -1281,17 +1799,13 @@ Int_t TColor::GetColorBright(Int_t n)
    return nb;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function: Returns the dark color number corresponding to n
+/// If the TColor object does not exist, it is created.
+/// The convention is that the dark color nd = n+100
 
 Int_t TColor::GetColorDark(Int_t n)
 {
-   /* Begin_html
-   Static function: Returns the dark color number corresponding to n
-   If the TColor object does not exist, it is created.
-   The convention is that the dark color nd = n+100
-   End_html */
-
    if (n < 0) return -1;
 
    // Get list of all defined colors
@@ -1317,16 +1831,12 @@ Int_t TColor::GetColorDark(Int_t n)
    return nd;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function: Returns the transparent color number corresponding to n.
+/// The transparency level is given by the alpha value a.
 
 Int_t TColor::GetColorTransparent(Int_t n, Float_t a)
 {
-   /* Begin_html
-   Static function: Returns the transparent color number corresponding to n.
-   The transparency level is given by the alpha value a.
-   End_html */
-
    if (n < 0) return -1;
 
    TColor *color = gROOT->GetColor(n);
@@ -1342,19 +1852,14 @@ Int_t TColor::GetColorTransparent(Int_t n, Float_t a)
    }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static method that given a color index number, returns the corresponding
+/// pixel value. This pixel value can be used in the GUI classes. This call
+/// does not work in batch mode since it needs to communicate with the
+/// graphics system.
 
 ULong_t TColor::Number2Pixel(Int_t ci)
 {
-   /* Begin_html
-   Static method that given a color index number, returns the corresponding
-   pixel value. This pixel value can be used in the GUI classes. This call
-   does not work in batch mode since it needs to communicate with the
-   graphics system.
-   End_html */
-
-
    TColor::InitializeColors();
    TColor *color = gROOT->GetColor(ci);
    if (color)
@@ -1365,16 +1870,12 @@ ULong_t TColor::Number2Pixel(Int_t ci)
    return 0;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Convert r,g,b to graphics system dependent pixel value.
+/// The r,g,b triplet must be [0,1].
 
 ULong_t TColor::RGB2Pixel(Float_t r, Float_t g, Float_t b)
 {
-   /* Begin_html
-   Convert r,g,b to graphics system dependent pixel value.
-   The r,g,b triplet must be [0,1].
-   End_html */
-
    if (r < 0) r = 0;
    if (g < 0) g = 0;
    if (b < 0) b = 0;
@@ -1391,16 +1892,12 @@ ULong_t TColor::RGB2Pixel(Float_t r, Float_t g, Float_t b)
    return color.fPixel;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Convert r,g,b to graphics system dependent pixel value.
+/// The r,g,b triplet must be [0,255].
 
 ULong_t TColor::RGB2Pixel(Int_t r, Int_t g, Int_t b)
 {
-   /* Begin_html
-   Convert r,g,b to graphics system dependent pixel value.
-   The r,g,b triplet must be [0,255].
-   End_html */
-
    if (r < 0) r = 0;
    if (g < 0) g = 0;
    if (b < 0) b = 0;
@@ -1417,17 +1914,13 @@ ULong_t TColor::RGB2Pixel(Int_t r, Int_t g, Int_t b)
    return color.fPixel;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Convert machine dependent pixel value (obtained via RGB2Pixel or
+/// via Number2Pixel() or via TColor::GetPixel()) to r,g,b triplet.
+/// The r,g,b triplet will be [0,1].
 
 void TColor::Pixel2RGB(ULong_t pixel, Float_t &r, Float_t &g, Float_t &b)
 {
-   /* Begin_html
-   Convert machine dependent pixel value (obtained via RGB2Pixel or
-   via Number2Pixel() or via TColor::GetPixel()) to r,g,b triplet.
-   The r,g,b triplet will be [0,1].
-   End_html */
-
    ColorStruct_t color;
    color.fPixel = pixel;
    gVirtualX->QueryColor(gVirtualX->GetColormap(), color);
@@ -1436,17 +1929,13 @@ void TColor::Pixel2RGB(ULong_t pixel, Float_t &r, Float_t &g, Float_t &b)
    b = (Float_t)color.fBlue / 65535;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Convert machine dependent pixel value (obtained via RGB2Pixel or
+/// via Number2Pixel() or via TColor::GetPixel()) to r,g,b triplet.
+/// The r,g,b triplet will be [0,255].
 
 void TColor::Pixel2RGB(ULong_t pixel, Int_t &r, Int_t &g, Int_t &b)
 {
-   /* Begin_html
-   Convert machine dependent pixel value (obtained via RGB2Pixel or
-   via Number2Pixel() or via TColor::GetPixel()) to r,g,b triplet.
-   The r,g,b triplet will be [0,255].
-   End_html */
-
    ColorStruct_t color;
    color.fPixel = pixel;
    gVirtualX->QueryColor(gVirtualX->GetColormap(), color);
@@ -1455,19 +1944,15 @@ void TColor::Pixel2RGB(ULong_t pixel, Int_t &r, Int_t &g, Int_t &b)
    b = color.fBlue / 257;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Convert machine dependent pixel value (obtained via RGB2Pixel or
+/// via Number2Pixel() or via TColor::GetPixel()) to a hexadecimal string.
+/// This string can be directly passed to, for example,
+/// TGClient::GetColorByName(). String will be reused so copy immediately
+/// if needed.
 
 const char *TColor::PixelAsHexString(ULong_t pixel)
 {
-   /* Begin_html
-   Convert machine dependent pixel value (obtained via RGB2Pixel or
-   via Number2Pixel() or via TColor::GetPixel()) to a hexadecimal string.
-   This string can be directly passed to, for example,
-   TGClient::GetColorByName(). String will be reused so copy immediately
-   if needed.
-   End_html */
-
    static TString tempbuf;
    Int_t r, g, b;
    Pixel2RGB(pixel, r, g, b);
@@ -1475,15 +1960,11 @@ const char *TColor::PixelAsHexString(ULong_t pixel)
    return tempbuf;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Save a color with index > 228 as a C++ statement(s) on output stream out.
 
 void TColor::SaveColor(std::ostream &out, Int_t ci)
 {
-   /* Begin_html
-   Save a color with index > 228 as a C++ statement(s) on output stream out.
-   End_html */
-
    char quote = '"';
    Float_t r,g,b,a;
    Int_t ri, gi, bi;
@@ -1518,27 +1999,18 @@ void TColor::SaveColor(std::ostream &out, Int_t ci)
    }
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
-
+/// Return whether all colors return grayscale values.
 Bool_t TColor::IsGrayscale()
 {
-   /* Begin_html
-   Return whether all colors return grayscale values.
-   End_html */
-
    return fgGrayscaleMode;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Set whether all colors should return grayscale values.
 
 void TColor::SetGrayscale(Bool_t set /*= kTRUE*/)
 {
-   /* Begin_html
-   Set whether all colors should return grayscale values.
-   End_html */
-
    if (fgGrayscaleMode == set) return;
 
    fgGrayscaleMode = set;
@@ -1552,69 +2024,62 @@ void TColor::SetGrayscale(Bool_t set /*= kTRUE*/)
       color->Allocate();
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function creating a color table with several connected linear gradients.
+///
+///   - Number: The number of end point colors that will form the gradients.
+///             Must be at least 2.
+///   - Stops: Where in the whole table the end point colors should lie.
+///            Each entry must be on [0, 1], each entry must be greater than
+///            the previous entry.
+///   - Red, Green, Blue: The end point color values.
+///                       Each entry must be on [0, 1]
+///   - NColors: Total number of colors in the table. Must be at least 1.
+///
+/// Returns a positive value on success and -1 on error.
+///
+/// The table is constructed by tracing lines between the given points in
+/// RGB space.  Each color value may have a value between 0 and 1.  The
+/// difference between consecutive "Stops" values gives the fraction of
+/// space in the whole table that should be used for the interval between
+/// the corresponding color values.
+///
+/// Normally the first element of Stops should be 0 and the last should be 1.
+/// If this is not true, fewer than NColors will be used in proportion with
+/// the total interval between the first and last elements of Stops.
+///
+/// This definition is similar to the povray-definition of gradient
+/// color tables.
+///
+/// For instance:
+/// ~~~ {.cpp}
+/// UInt_t Number = 3;
+/// Double_t Red[3]   = { 0.0, 1.0, 1.0 };
+/// Double_t Green[3] = { 0.0, 0.0, 1.0 };
+/// Double_t Blue[3]  = { 1.0, 0.0, 1.0 };
+/// Double_t Stops[3] = { 0.0, 0.4, 1.0 };
+/// ~~~
+/// This defines a table in which there are three color end points:
+/// RGB = {0, 0, 1}, {1, 0, 0}, and {1, 1, 1} = blue, red, white
+/// The first 40% of the table is used to go linearly from blue to red.
+/// The remaining 60% of the table is used to go linearly from red to white.
+///
+/// If you define a very short interval such that less than one color fits
+/// in it, no colors at all will be allocated.  If this occurs for all
+/// intervals, ROOT will revert to the default palette.
+///
+/// Original code by Andreas Zoglauer (zog@mpe.mpg.de)
 
 Int_t TColor::CreateGradientColorTable(UInt_t Number, Double_t* Stops,
                               Double_t* Red, Double_t* Green,
                               Double_t* Blue, UInt_t NColors, Float_t alpha)
 {
-   /* Begin_html
-   Static function creating a color table with several connected linear gradients.
-   <ul>
-   <li>Number: The number of end point colors that will form the gradients.
-               Must be at least 2.
-   <li>Stops: Where in the whole table the end point colors should lie.
-              Each entry must be on [0, 1], each entry must be greater than
-              the previous entry.
-   <li>Red, Green, Blue: The end point color values.
-                         Each entry must be on [0, 1]
-   <li>NColors: Total number of colors in the table. Must be at least 1.
-   </ul>
-
-   Returns a positive value on success and -1 on error.
-   <p>
-   The table is constructed by tracing lines between the given points in
-   RGB space.  Each color value may have a value between 0 and 1.  The
-   difference between consecutive "Stops" values gives the fraction of
-   space in the whole table that should be used for the interval between
-   the corresponding color values.
-   <p>
-   Normally the first element of Stops should be 0 and the last should be 1.
-   If this is not true, fewer than NColors will be used in proportion with
-   the total interval between the first and last elements of Stops.
-   <p>
-   This definition is similar to the povray-definition of gradient
-   color tables.
-   <p>
-   For instance:
-   <pre>
-   UInt_t Number = 3;
-   Double_t Red[3]   = { 0.0, 1.0, 1.0 };
-   Double_t Green[3] = { 0.0, 0.0, 1.0 };
-   Double_t Blue[3]  = { 1.0, 0.0, 1.0 };
-   Double_t Stops[3] = { 0.0, 0.4, 1.0 };
-   </pre>
-   This defines a table in which there are three color end points:
-   RGB = {0, 0, 1}, {1, 0, 0}, and {1, 1, 1} = blue, red, white
-   The first 40% of the table is used to go linearly from blue to red.
-   The remaining 60% of the table is used to go linearly from red to white.
-   <p>
-   If you define a very short interval such that less than one color fits
-   in it, no colors at all will be allocated.  If this occurs for all
-   intervals, ROOT will revert to the default palette.
-   <p>
-   Original code by Andreas Zoglauer (zog@mpe.mpg.de)
-   End_html */
-
    TColor::InitializeColors();
 
    UInt_t g, c;
    UInt_t nPalette = 0;
    Int_t *palette = new Int_t[NColors+1];
    UInt_t nColorsGradient;
-   TColor *color;
-   Int_t highestIndex = 0;
 
    if(Number < 2 || NColors < 1){
       delete [] palette;
@@ -1639,193 +2104,172 @@ Int_t TColor::CreateGradientColorTable(UInt_t Number, Double_t* Stops,
       }
    }
 
-   // Search for the highest color index not used in ROOT:
-   // We do not want to overwrite some colors...
-   TSeqCollection *colorTable = gROOT->GetListOfColors();
-   if ((color = (TColor *) colorTable->Last()) != 0) {
-      if (color->GetNumber() > highestIndex) {
-         highestIndex = color->GetNumber();
-      }
-      while ((color = (TColor *) (colorTable->Before(color))) != 0) {
-         if (color->GetNumber() > highestIndex) {
-            highestIndex = color->GetNumber();
-         }
-      }
-   }
-   highestIndex++;
-
    // Now create the colors and add them to the default palette:
 
    // For each defined gradient...
-   TColor *hi;
    for (g = 1; g < Number; g++) {
       // create the colors...
       nColorsGradient = (Int_t) (floor(NColors*Stops[g]) - floor(NColors*Stops[g-1]));
       for (c = 0; c < nColorsGradient; c++) {
-         new TColor(highestIndex,
-                    Red[g-1] + c * (Red[g] - Red[g-1])/ nColorsGradient,
-                    Green[g-1] + c * (Green[g] - Green[g-1])/ nColorsGradient,
-                    Blue[g-1] + c * (Blue[g] - Blue[g-1])/ nColorsGradient,
-                    "  ");
-         hi = gROOT->GetColor(highestIndex);
-         if (hi) hi->SetAlpha(alpha);
-         palette[nPalette] = highestIndex;
+         new TColor( Float_t(Red[g-1]   + c * (Red[g]   - Red[g-1])  / nColorsGradient),
+                     Float_t(Green[g-1] + c * (Green[g] - Green[g-1])/ nColorsGradient),
+                     Float_t(Blue[g-1]  + c * (Blue[g]  - Blue[g-1]) / nColorsGradient),
+                     alpha);
+         palette[nPalette] = gHighestColorIndex;
          nPalette++;
-         highestIndex++;
       }
    }
 
    TColor::SetPalette(nPalette, palette);
    delete [] palette;
-
-   return highestIndex - NColors;
+   return gHighestColorIndex + 1 - NColors;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
+/// Static function.
+/// The color palette is used by the histogram classes
+///  (see TH1::Draw options).
+/// For example TH1::Draw("col") draws a 2-D histogram with cells
+/// represented by a box filled with a color CI function of the cell content.
+/// if the cell content is N, the color CI used will be the color number
+/// in colors[N],etc. If the maximum cell content is > ncolors, all
+/// cell contents are scaled to ncolors.
+///
+/// `if ncolors <= 0` a default palette (see below) of 50 colors is
+/// defined. The colors defined in this palette are OK for coloring pads, labels.
+///
+/// ~~~ {.cpp}
+/// index 0->9   : grey colors from light to dark grey
+/// index 10->19 : "brown" colors
+/// index 20->29 : "blueish" colors
+/// index 30->39 : "redish" colors
+/// index 40->49 : basic colors
+/// ~~~
+///
+/// `if ncolors == 1 && colors == 0`, a Rainbow Color map is created
+/// with 50 colors. It is kept for backward compatibility. Better palettes like
+/// kBird are recommended.
+///
+/// High quality predefined palettes with 255 colors are available when `colors == 0`.
+/// The following value of `ncolors` give access to:
+///
+/// ~~~ {.cpp}
+/// if ncolors = 51 and colors=0, a Deep Sea palette is used.
+/// if ncolors = 52 and colors=0, a Grey Scale palette is used.
+/// if ncolors = 53 and colors=0, a Dark Body Radiator palette is used.
+/// if ncolors = 54 and colors=0, a Two-Color Hue palette is used.(dark blue through neutral gray to bright yellow)
+/// if ncolors = 55 and colors=0, a Rain Bow palette is used.
+/// if ncolors = 56 and colors=0, an Inverted Dark Body Radiator palette is used.
+/// if ncolors = 57 and colors=0, a monotonically increasing L value palette is used.
+/// if ncolors = 58 and colors=0, a Cubehelix palette is used
+///                                 (Cf. Dave Green's "cubehelix" colour scheme at http://www.mrao.cam.ac.uk/~dag/CUBEHELIX/)
+/// if ncolors = 59 and colors=0, a Green Red Violet palette is used.
+/// if ncolors = 60 and colors=0, a Blue Red Yellow palette is used.
+/// if ncolors = 61 and colors=0, an Ocean palette is used.
+/// if ncolors = 62 and colors=0, a Color Printable On Grey palette is used.
+/// if ncolors = 63 and colors=0, an Alpine palette is used.
+/// if ncolors = 64 and colors=0, an Aquamarine palette is used.
+/// if ncolors = 65 and colors=0, an Army palette is used.
+/// if ncolors = 66 and colors=0, an Atlantic palette is used.
+/// if ncolors = 67 and colors=0, an Aurora palette is used.
+/// if ncolors = 68 and colors=0, an Avocado palette is used.
+/// if ncolors = 69 and colors=0, a Beach palette is used.
+/// if ncolors = 70 and colors=0, a Black Body palette is used.
+/// if ncolors = 71 and colors=0, a Blue Green Yellow palette is used.
+/// if ncolors = 72 and colors=0, a Brown Cyan palette is used.
+/// if ncolors = 73 and colors=0, a CMYK palette is used.
+/// if ncolors = 74 and colors=0, a Candy palette is used.
+/// if ncolors = 75 and colors=0, a Cherry palette is used.
+/// if ncolors = 76 and colors=0, a Coffee palette is used.
+/// if ncolors = 77 and colors=0, a Dark Rain Bow palette is used.
+/// if ncolors = 78 and colors=0, a Dark Terrain palette is used.
+/// if ncolors = 79 and colors=0, a Fall palette is used.
+/// if ncolors = 80 and colors=0, a Fruit Punch palette is used.
+/// if ncolors = 81 and colors=0, a Fuchsia palette is used.
+/// if ncolors = 82 and colors=0, a Grey Yellow palette is used.
+/// if ncolors = 83 and colors=0, a Green Brown Terrain palette is used.
+/// if ncolors = 84 and colors=0, a Green Pink palette is used.
+/// if ncolors = 85 and colors=0, an Island palette is used.
+/// if ncolors = 86 and colors=0, a Lake palette is used.
+/// if ncolors = 87 and colors=0, a Light Temperature palette is used.
+/// if ncolors = 88 and colors=0, a Light Terrain palette is used.
+/// if ncolors = 89 and colors=0, a Mint palette is used.
+/// if ncolors = 90 and colors=0, a Neon palette is used.
+/// if ncolors = 91 and colors=0, a Pastel palette is used.
+/// if ncolors = 92 and colors=0, a Pearl palette is used.
+/// if ncolors = 93 and colors=0, a Pigeon palette is used.
+/// if ncolors = 94 and colors=0, a Plum palette is used.
+/// if ncolors = 95 and colors=0, a Red Blue palette is used.
+/// if ncolors = 96 and colors=0, a Rose palette is used.
+/// if ncolors = 97 and colors=0, a Rust palette is used.
+/// if ncolors = 98 and colors=0, a Sandy Terrain palette is used.
+/// if ncolors = 99 and colors=0, a Sienna palette is used.
+/// if ncolors = 100 and colors=0, a Solar palette is used.
+/// if ncolors = 101 and colors=0, a South West palette is used.
+/// if ncolors = 102 and colors=0, a Starry Night palette is used.
+/// if ncolors = 103 and colors=0, a Sunset palette is used.
+/// if ncolors = 104 and colors=0, a Temperature Map palette is used.
+/// if ncolors = 105 and colors=0, a Thermometer palette is used.
+/// if ncolors = 106 and colors=0, a Valentine palette is used.
+/// if ncolors = 107 and colors=0, a Visible Spectrum palette is used.
+/// if ncolors = 108 and colors=0, a Water Melon palette is used.
+/// if ncolors = 109 and colors=0, a Cool palette is used.
+/// if ncolors = 110 and colors=0, a Copper palette is used.
+/// if ncolors = 111 and colors=0, a Gist Earth palette is used.
+/// if ncolors = 112 and colors=0, a Viridis palette is used.
+/// ~~~
+/// These palettes can also be accessed by names:
+/// ~~~ {.cpp}
+/// kDeepSea=51,          kGreyScale=52,    kDarkBodyRadiator=53,
+/// kBlueYellow= 54,      kRainBow=55,      kInvertedDarkBodyRadiator=56,
+/// kBird=57,             kCubehelix=58,    kGreenRedViolet=59,
+/// kBlueRedYellow=60,    kOcean=61,        kColorPrintableOnGrey=62,
+/// kAlpine=63,           kAquamarine=64,   kArmy=65,
+/// kAtlantic=66,         kAurora=67,       kAvocado=68,
+/// kBeach=69,            kBlackBody=70,    kBlueGreenYellow=71,
+/// kBrownCyan=72,        kCMYK=73,         kCandy=74,
+/// kCherry=75,           kCoffee=76,       kDarkRainBow=77,
+/// kDarkTerrain=78,      kFall=79,         kFruitPunch=80,
+/// kFuchsia=81,          kGreyYellow=82,   kGreenBrownTerrain=83,
+/// kGreenPink=84,        kIsland=85,       kLake=86,
+/// kLightTemperature=87, kLightTerrain=88, kMint=89,
+/// kNeon=90,             kPastel=91,       kPearl=92,
+/// kPigeon=93,           kPlum=94,         kRedBlue=95,
+/// kRose=96,             kRust=97,         kSandyTerrain=98,
+/// kSienna=99,           kSolar=100,       kSouthWest=101,
+/// kStarryNight=102,     kSunset=103,      kTemperatureMap=104,
+/// kThermometer=105,     kValentine=106,   kVisibleSpectrum=107,
+/// kWaterMelon=108,      kCool=109,        kCopper=110,
+/// kGistEarth=111        kViridis=112
+/// ~~~
+/// For example:
+/// ~~~ {.cpp}
+/// gStyle->SetPalette(kBird);
+/// ~~~
+/// Set the current palette as "Bird" (number 57).
+///
+/// The color numbers specified in the palette can be viewed by selecting
+/// the item "colors" in the "VIEW" menu of the canvas toolbar.
+/// The color parameters can be changed via TColor::SetRGB.
+///
+/// Note that when drawing a 2D histogram `h2` with the option "COL" or
+/// "COLZ" or with any "CONT" options using the color map, the number of colors
+/// used is defined by the number of contours `n` specified with:
+/// `h2->SetContour(n)`
 
 void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
 {
-   /* Begin_html
-   Static function.
-   The color palette is used by the histogram classes
-    (see TH1::Draw options).
-   For example TH1::Draw("col") draws a 2-D histogram with cells
-   represented by a box filled with a color CI function of the cell content.
-   if the cell content is N, the color CI used will be the color number
-   in colors[N],etc. If the maximum cell content is > ncolors, all
-   cell contents are scaled to ncolors.
-   <p>
-   <tt>if ncolors <= 0</tt> a default palette (see below) of 50 colors is
-   defined. The colors defined in this palette are OK for coloring pads, labels.
-   <p>
-   <pre>
-   index 0->9   : grey colors from light to dark grey
-   index 10->19 : "brown" colors
-   index 20->29 : "blueish" colors
-   index 30->39 : "redish" colors
-   index 40->49 : basic colors
-   </pre>
-   <p>
-   <tt>if ncolors == 1 && colors == 0</tt>, a Rainbow Color map is created
-   with 50 colors. It is kept for backward compatibility. Better palettes like
-   kBird are recommended.
-   <p>
-   High quality predefined palettes with 255 colors are available when <tt>colors == 0</tt>.
-   The following value of <tt>ncolors</tt> give access to:
-   <p>
-   <pre>
-   if ncolors = 51 and colors=0, a Deep Sea palette is used.
-   if ncolors = 52 and colors=0, a Grey Scale palette is used.
-   if ncolors = 53 and colors=0, a Dark Body Radiator palette is used.
-   if ncolors = 54 and colors=0, a Two-Color Hue palette is used.(dark blue through neutral gray to bright yellow)
-   if ncolors = 55 and colors=0, a Rain Bow palette is used.
-   if ncolors = 56 and colors=0, an Inverted Dark Body Radiator palette is used.
-   if ncolors = 57 and colors=0, a monotonically increasing L value palette is used.
-   if ncolors = 58 and colors=0, a Cubehelix palette is used
-                                   (Cf. Dave Green's "cubehelix" colour scheme at http://www.mrao.cam.ac.uk/~dag/CUBEHELIX/)
-   if ncolors = 59 and colors=0, a Green Red Violet palette is used.
-   if ncolors = 60 and colors=0, a Blue Red Yellow palette is used.
-   if ncolors = 61 and colors=0, an Ocean palette is used.
-   if ncolors = 62 and colors=0, a Color Printable On Grey palette is used.
-   if ncolors = 63 and colors=0, an Alpine palette is used.
-   if ncolors = 64 and colors=0, an Aquamarine palette is used.
-   if ncolors = 65 and colors=0, an Army palette is used.
-   if ncolors = 66 and colors=0, an Atlantic palette is used.
-   if ncolors = 67 and colors=0, an Aurora palette is used.
-   if ncolors = 68 and colors=0, an Avocado palette is used.
-   if ncolors = 69 and colors=0, a Beach palette is used.
-   if ncolors = 70 and colors=0, a Black Body palette is used.
-   if ncolors = 71 and colors=0, a Blue Green Yellow palette is used.
-   if ncolors = 72 and colors=0, a Brown Cyan palette is used.
-   if ncolors = 73 and colors=0, a CMYK palette is used.
-   if ncolors = 74 and colors=0, a Candy palette is used.
-   if ncolors = 75 and colors=0, a Cherry palette is used.
-   if ncolors = 76 and colors=0, a Coffee palette is used.
-   if ncolors = 77 and colors=0, a Dark Rain Bow palette is used.
-   if ncolors = 78 and colors=0, a Dark Terrain palette is used.
-   if ncolors = 79 and colors=0, a Fall palette is used.
-   if ncolors = 80 and colors=0, a Fruit Punch palette is used.
-   if ncolors = 81 and colors=0, a Fuchsia palette is used.
-   if ncolors = 82 and colors=0, a Grey Yellow palette is used.
-   if ncolors = 83 and colors=0, a Green Brown Terrain palette is used.
-   if ncolors = 84 and colors=0, a Green Pink palette is used.
-   if ncolors = 85 and colors=0, an Island palette is used.
-   if ncolors = 86 and colors=0, a Lake palette is used.
-   if ncolors = 87 and colors=0, a Light Temperature palette is used.
-   if ncolors = 88 and colors=0, a Light Terrain palette is used.
-   if ncolors = 89 and colors=0, a Mint palette is used.
-   if ncolors = 90 and colors=0, a Neon palette is used.
-   if ncolors = 91 and colors=0, a Pastel palette is used.
-   if ncolors = 92 and colors=0, a Pearl palette is used.
-   if ncolors = 93 and colors=0, a Pigeon palette is used.
-   if ncolors = 94 and colors=0, a Plum palette is used.
-   if ncolors = 95 and colors=0, a Red Blue palette is used.
-   if ncolors = 96 and colors=0, a Rose palette is used.
-   if ncolors = 97 and colors=0, a Rust palette is used.
-   if ncolors = 98 and colors=0, a Sandy Terrain palette is used.
-   if ncolors = 99 and colors=0, a Sienna palette is used.
-   if ncolors = 100 and colors=0, a Solar palette is used.
-   if ncolors = 101 and colors=0, a South West palette is used.
-   if ncolors = 102 and colors=0, a Starry Night palette is used.
-   if ncolors = 103 and colors=0, a Sunset palette is used.
-   if ncolors = 104 and colors=0, a Temperature Map palette is used.
-   if ncolors = 105 and colors=0, a Thermometer palette is used.
-   if ncolors = 106 and colors=0, a Valentine palette is used.
-   if ncolors = 107 and colors=0, a Visible Spectrum palette is used.
-   if ncolors = 108 and colors=0, a Water Melon palette is used.
-   if ncolors = 109 and colors=0, a Cool palette is used.
-   if ncolors = 110 and colors=0, a Copper palette is used.
-   if ncolors = 111 and colors=0, a Gist Earth palette is used.
-   if ncolors = 112 and colors=0, a Viridis palette is used.
-   </pre>
-   These palettes can also be accessed by names:
-   <pre>
-   kDeepSea=51,          kGreyScale=52,    kDarkBodyRadiator=53,
-   kBlueYellow= 54,      kRainBow=55,      kInvertedDarkBodyRadiator=56,
-   kBird=57,             kCubehelix=58,    kGreenRedViolet=59,
-   kBlueRedYellow=60,    kOcean=61,        kColorPrintableOnGrey=62,
-   kAlpine=63,           kAquamarine=64,   kArmy=65,
-   kAtlantic=66,         kAurora=67,       kAvocado=68,
-   kBeach=69,            kBlackBody=70,    kBlueGreenYellow=71,
-   kBrownCyan=72,        kCMYK=73,         kCandy=74,
-   kCherry=75,           kCoffee=76,       kDarkRainBow=77,
-   kDarkTerrain=78,      kFall=79,         kFruitPunch=80,
-   kFuchsia=81,          kGreyYellow=82,   kGreenBrownTerrain=83,
-   kGreenPink=84,        kIsland=85,       kLake=86,
-   kLightTemperature=87, kLightTerrain=88, kMint=89,
-   kNeon=90,             kPastel=91,       kPearl=92,
-   kPigeon=93,           kPlum=94,         kRedBlue=95,
-   kRose=96,             kRust=97,         kSandyTerrain=98,
-   kSienna=99,           kSolar=100,       kSouthWest=101,
-   kStarryNight=102,     kSunset=103,      kTemperatureMap=104,
-   kThermometer=105,     kValentine=106,   kVisibleSpectrum=107,
-   kWaterMelon=108,      kCool=109,        kCopper=110,
-   kGistEarth=111        kViridis=112
-   </pre>
-   For example:
-   <pre>
-   gStyle->SetPalette->(kBird);
-   </pre>
-   Set the current palette as "Bird" (number 57).
-   <p>
-   The color numbers specified in the palette can be viewed by selecting
-   the item "colors" in the "VIEW" menu of the canvas toolbar.
-   The color parameters can be changed via TColor::SetRGB.
-   <p>
-   Note that when drawing a 2D histogram <tt>h2</tt> with the option "COL" or
-   "COLZ" or with any "CONT" options using the color map, the number of colors
-   used is defined by the number of contours <tt>n</tt> specified with:
-   <tt>h2->SetContour(n)</tt>
-   End_html */
-
    Int_t i;
+
    static Int_t paletteType = 0;
+
    Int_t palette[50] = {19,18,17,16,15,14,13,12,11,20,
                         21,22,23,24,25,26,27,28,29,30, 8,
                         31,32,33,34,35,36,37,38,39,40, 9,
                         41,42,43,44,45,47,48,49,46,50, 2,
                          7, 6, 5, 4, 3, 2,1};
+
    // set default palette (pad type)
    if (ncolors <= 0) {
       ncolors = 50;
@@ -1846,20 +2290,42 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
 
    // High quality palettes (255 levels)
    if (colors == 0 && ncolors>50) {
-      if (paletteType == ncolors) return;
+
+      if (!fgPalettesList.fN) fgPalettesList.Set(62);        // Right now 62 high quality palettes
+      Int_t Idx = (Int_t)fgPalettesList.fArray[ncolors-51];  // High quality palettes indices start at 51
+
+      // This high quality palette has already been created. Reuse it.
+      if (Idx > 0) {
+         Double_t alphas = 10*(fgPalettesList.fArray[ncolors-51]-Idx);
+         Bool_t same_alpha = TMath::Abs(alpha-alphas) < 0.0001;
+         if (paletteType == ncolors && same_alpha) return; // The current palette is already this one.
+         fgPalette.Set(255); // High quality palettes have 255 entries
+         for (i=0;i<255;i++) fgPalette.fArray[i] = Idx+i;
+         paletteType = ncolors;
+
+         // restore the palette transparency if needed
+          if (alphas>0 && !same_alpha) {
+             TColor *ca;
+             for (i=0;i<255;i++) {
+                ca = gROOT->GetColor(Idx+i);
+                ca->SetAlpha(alpha);
+             }
+             fgPalettesList.fArray[paletteType-51] = (Double_t)Idx+alpha/10.;
+          }
+         return;
+      }
 
       TColor::InitializeColors();
       Double_t stops[9] = { 0.0000, 0.1250, 0.2500, 0.3750, 0.5000, 0.6250, 0.7500, 0.8750, 1.0000};
 
       switch (ncolors) {
-
       // Deep Sea
       case 51:
          {
             Double_t red[9]   = {  0./255.,  9./255., 13./255., 17./255., 24./255.,  32./255.,  27./255.,  25./255.,  29./255.};
             Double_t green[9] = {  0./255.,  0./255.,  0./255.,  2./255., 37./255.,  74./255., 113./255., 160./255., 221./255.};
             Double_t blue[9]  = { 28./255., 42./255., 59./255., 78./255., 98./255., 129./255., 154./255., 184./255., 221./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1869,7 +2335,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255., 32./255., 64./255., 96./255., 128./255., 160./255., 192./255., 224./255., 255./255.};
             Double_t green[9] = { 0./255., 32./255., 64./255., 96./255., 128./255., 160./255., 192./255., 224./255., 255./255.};
             Double_t blue[9]  = { 0./255., 32./255., 64./255., 96./255., 128./255., 160./255., 192./255., 224./255., 255./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1879,7 +2345,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255., 45./255., 99./255., 156./255., 212./255., 230./255., 237./255., 234./255., 242./255.};
             Double_t green[9] = { 0./255.,  0./255.,  0./255.,  45./255., 101./255., 168./255., 238./255., 238./255., 243./255.};
             Double_t blue[9]  = { 0./255.,  1./255.,  1./255.,   3./255.,   9./255.,   8./255.,  11./255.,  95./255., 230./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1889,7 +2355,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  0./255.,  22./255., 44./255., 68./255., 93./255., 124./255., 160./255., 192./255., 237./255.};
             Double_t green[9] = {  0./255.,  16./255., 41./255., 67./255., 93./255., 125./255., 162./255., 194./255., 241./255.};
             Double_t blue[9]  = { 97./255., 100./255., 99./255., 99./255., 93./255.,  68./255.,  44./255.,  26./255.,  74./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1899,7 +2365,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  0./255.,   5./255.,  15./255.,  35./255., 102./255., 196./255., 208./255., 199./255., 110./255.};
             Double_t green[9] = {  0./255.,  48./255., 124./255., 192./255., 206./255., 226./255.,  97./255.,  16./255.,   0./255.};
             Double_t blue[9]  = { 99./255., 142./255., 198./255., 201./255.,  90./255.,  22./255.,  13./255.,   8./255.,   2./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1909,7 +2375,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 242./255., 234./255., 237./255., 230./255., 212./255., 156./255., 99./255., 45./255., 0./255.};
             Double_t green[9] = { 243./255., 238./255., 238./255., 168./255., 101./255.,  45./255.,  0./255.,  0./255., 0./255.};
             Double_t blue[9]  = { 230./255.,  95./255.,  11./255.,   8./255.,   9./255.,   3./255.,  1./255.,  1./255., 0./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1919,7 +2385,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0.2082, 0.0592, 0.0780, 0.0232, 0.1802, 0.5301, 0.8186, 0.9956, 0.9764};
             Double_t green[9] = { 0.1664, 0.3599, 0.5041, 0.6419, 0.7178, 0.7492, 0.7328, 0.7862, 0.9832};
             Double_t blue[9]  = { 0.5293, 0.8684, 0.8385, 0.7914, 0.6425, 0.4662, 0.3499, 0.1968, 0.0539};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1929,7 +2395,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0.0000, 0.0956, 0.0098, 0.2124, 0.6905, 0.9242, 0.7914, 0.7596, 1.0000};
             Double_t green[9] = { 0.0000, 0.1147, 0.3616, 0.5041, 0.4577, 0.4691, 0.6905, 0.9237, 1.0000};
             Double_t blue[9]  = { 0.0000, 0.2669, 0.3121, 0.1318, 0.2236, 0.6741, 0.9882, 0.9593, 1.0000};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1939,7 +2405,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {13./255., 23./255., 25./255., 63./255., 76./255., 104./255., 137./255., 161./255., 206./255.};
             Double_t green[9] = {95./255., 67./255., 37./255., 21./255.,  0./255.,  12./255.,  35./255.,  52./255.,  79./255.};
             Double_t blue[9]  = { 4./255.,  3./255.,  2./255.,  6./255., 11./255.,  22./255.,  49./255.,  98./255., 208./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1949,7 +2415,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {0./255.,  61./255.,  89./255., 122./255., 143./255., 160./255., 185./255., 204./255., 231./255.};
             Double_t green[9] = {0./255.,   0./255.,   0./255.,   0./255.,  14./255.,  37./255.,  72./255., 132./255., 235./255.};
             Double_t blue[9]  = {0./255., 140./255., 224./255., 144./255.,   4./255.,   5./255.,   6./255.,   9./255.,  13./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1959,7 +2425,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 14./255.,  7./255.,  2./255.,  0./255.,  5./255.,  11./255.,  55./255., 131./255., 229./255.};
             Double_t green[9] = {105./255., 56./255., 26./255.,  1./255., 42./255.,  74./255., 131./255., 171./255., 229./255.};
             Double_t blue[9]  = {  2./255., 21./255., 35./255., 60./255., 92./255., 113./255., 160./255., 185./255., 229./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1969,7 +2435,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255.,   0./255.,   0./255.,  70./255., 148./255., 231./255., 235./255., 237./255., 244./255.};
             Double_t green[9] = { 0./255.,   0./255.,   0./255.,   0./255.,   0./255.,  69./255.,  67./255., 216./255., 244./255.};
             Double_t blue[9]  = { 0./255., 102./255., 228./255., 231./255., 177./255., 124./255., 137./255.,  20./255., 244./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1979,7 +2445,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 50./255., 56./255., 63./255., 68./255.,  93./255., 121./255., 165./255., 192./255., 241./255.};
             Double_t green[9] = { 66./255., 81./255., 91./255., 96./255., 111./255., 128./255., 155./255., 189./255., 241./255.};
             Double_t blue[9]  = { 97./255., 91./255., 75./255., 65./255.,  77./255., 103./255., 143./255., 167./255., 217./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1989,7 +2455,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 145./255., 166./255., 167./255., 156./255., 131./255., 114./255., 101./255., 112./255., 132./255.};
             Double_t green[9] = { 158./255., 178./255., 179./255., 181./255., 163./255., 154./255., 144./255., 152./255., 159./255.};
             Double_t blue[9]  = { 190./255., 199./255., 201./255., 192./255., 176./255., 169./255., 160./255., 166./255., 190./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -1999,7 +2465,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 93./255.,   91./255.,  99./255., 108./255., 130./255., 125./255., 132./255., 155./255., 174./255.};
             Double_t green[9] = { 126./255., 124./255., 128./255., 129./255., 131./255., 121./255., 119./255., 153./255., 173./255.};
             Double_t blue[9]  = { 103./255.,  94./255.,  87./255.,  85./255.,  80./255.,  85./255., 107./255., 120./255., 146./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2009,7 +2475,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 24./255., 40./255., 69./255.,  90./255., 104./255., 114./255., 120./255., 132./255., 103./255.};
             Double_t green[9] = { 29./255., 52./255., 94./255., 127./255., 150./255., 162./255., 159./255., 151./255., 101./255.};
             Double_t blue[9]  = { 29./255., 52./255., 96./255., 132./255., 162./255., 181./255., 184./255., 186./255., 131./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2019,7 +2485,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 46./255., 38./255., 61./255., 92./255., 113./255., 121./255., 132./255., 150./255., 191./255.};
             Double_t green[9] = { 46./255., 36./255., 40./255., 69./255., 110./255., 135./255., 131./255.,  92./255.,  34./255.};
             Double_t blue[9]  = { 46./255., 80./255., 74./255., 70./255.,  81./255., 105./255., 165./255., 211./255., 225./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2029,7 +2495,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255.,  4./255., 12./255.,  30./255.,  52./255., 101./255., 142./255., 190./255., 237./255.};
             Double_t green[9] = { 0./255., 40./255., 86./255., 121./255., 140./255., 172./255., 187./255., 213./255., 240./255.};
             Double_t blue[9]  = { 0./255.,  9./255., 14./255.,  18./255.,  21./255.,  23./255.,  27./255.,  35./255., 101./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2039,7 +2505,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 198./255., 206./255., 206./255., 211./255., 198./255., 181./255., 161./255., 171./255., 244./255.};
             Double_t green[9] = { 103./255., 133./255., 150./255., 172./255., 178./255., 174./255., 163./255., 175./255., 244./255.};
             Double_t blue[9]  = {  49./255.,  54./255.,  55./255.,  66./255.,  91./255., 130./255., 184./255., 224./255., 244./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2049,7 +2515,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 243./255., 243./255., 240./255., 240./255., 241./255., 239./255., 186./255., 151./255., 129./255.};
             Double_t green[9] = {   0./255.,  46./255.,  99./255., 149./255., 194./255., 220./255., 183./255., 166./255., 147./255.};
             Double_t blue[9]  = {   6./255.,   8./255.,  36./255.,  91./255., 169./255., 235./255., 246./255., 240./255., 233./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2059,7 +2525,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 22./255., 19./255.,  19./255.,  25./255.,  35./255.,  53./255.,  88./255., 139./255., 210./255.};
             Double_t green[9] = {  0./255., 32./255.,  69./255., 108./255., 135./255., 159./255., 183./255., 198./255., 215./255.};
             Double_t blue[9]  = { 77./255., 96./255., 110./255., 116./255., 110./255., 100./255.,  90./255.,  78./255.,  70./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2069,7 +2535,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 68./255., 116./255., 165./255., 182./255., 189./255., 180./255., 145./255., 111./255.,  71./255.};
             Double_t green[9] = { 37./255.,  82./255., 135./255., 178./255., 204./255., 225./255., 221./255., 202./255., 147./255.};
             Double_t blue[9]  = { 16./255.,  55./255., 105./255., 147./255., 196./255., 226./255., 232./255., 224./255., 178./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2079,7 +2545,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  61./255.,  99./255., 136./255., 181./255., 213./255., 225./255., 198./255., 136./255., 24./255.};
             Double_t green[9] = { 149./255., 140./255.,  96./255.,  83./255., 132./255., 178./255., 190./255., 135./255., 22./255.};
             Double_t blue[9]  = { 214./255., 203./255., 168./255., 135./255., 110./255., 100./255., 111./255., 113./255., 22./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2089,7 +2555,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 76./255., 120./255., 156./255., 183./255., 197./255., 180./255., 162./255., 154./255., 140./255.};
             Double_t green[9] = { 34./255.,  35./255.,  42./255.,  69./255., 102./255., 137./255., 164./255., 188./255., 197./255.};
             Double_t blue[9]  = { 64./255.,  69./255.,  78./255., 105./255., 142./255., 177./255., 205./255., 217./255., 198./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2099,7 +2565,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 37./255., 102./255., 157./255., 188./255., 196./255., 214./255., 223./255., 235./255., 251./255.};
             Double_t green[9] = { 37./255.,  29./255.,  25./255.,  37./255.,  67./255.,  91./255., 132./255., 185./255., 251./255.};
             Double_t blue[9]  = { 37./255.,  32./255.,  33./255.,  45./255.,  66./255.,  98./255., 137./255., 187./255., 251./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2109,7 +2575,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 79./255., 100./255., 119./255., 137./255., 153./255., 172./255., 192./255., 205./255., 250./255.};
             Double_t green[9] = { 63./255.,  79./255.,  93./255., 103./255., 115./255., 135./255., 167./255., 196./255., 250./255.};
             Double_t blue[9]  = { 51./255.,  59./255.,  66./255.,  61./255.,  62./255.,  70./255., 110./255., 160./255., 250./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2119,7 +2585,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  43./255.,  44./255., 50./255.,  66./255., 125./255., 172./255., 178./255., 155./255., 157./255.};
             Double_t green[9] = {  63./255.,  63./255., 85./255., 101./255., 138./255., 163./255., 122./255.,  51./255.,  39./255.};
             Double_t blue[9]  = { 121./255., 101./255., 58./255.,  44./255.,  47./255.,  55./255.,  57./255.,  44./255.,  43./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2129,7 +2595,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  0./255., 41./255., 62./255., 79./255., 90./255., 87./255., 99./255., 140./255., 228./255.};
             Double_t green[9] = {  0./255., 57./255., 81./255., 93./255., 85./255., 70./255., 71./255., 125./255., 228./255.};
             Double_t blue[9]  = { 95./255., 91./255., 91./255., 82./255., 60./255., 43./255., 44./255., 112./255., 228./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2139,7 +2605,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 49./255., 59./255., 72./255., 88./255., 114./255., 141./255., 176./255., 205./255., 222./255.};
             Double_t green[9] = { 78./255., 72./255., 66./255., 57./255.,  59./255.,  75./255., 106./255., 142./255., 173./255.};
             Double_t blue[9]  = { 78./255., 55./255., 46./255., 40./255.,  39./255.,  39./255.,  40./255.,  41./255.,  47./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2149,7 +2615,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 243./255., 222./255., 201./255., 185./255., 165./255., 158./255., 166./255., 187./255., 219./255.};
             Double_t green[9] = {  94./255., 108./255., 132./255., 135./255., 125./255.,  96./255.,  68./255.,  51./255.,  61./255.};
             Double_t blue[9]  = {   7./255.,  9./255.,   12./255.,  19./255.,  45./255.,  89./255., 118./255., 146./255., 118./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2159,7 +2625,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 19./255., 44./255., 74./255., 105./255., 137./255., 166./255., 194./255., 206./255., 220./255.};
             Double_t green[9] = { 19./255., 28./255., 40./255.,  55./255.,  82./255., 110./255., 159./255., 181./255., 220./255.};
             Double_t blue[9]  = { 19./255., 42./255., 68./255.,  96./255., 129./255., 157./255., 188./255., 203./255., 220./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2169,7 +2635,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 33./255., 44./255., 70./255.,  99./255., 140./255., 165./255., 199./255., 211./255., 216./255.};
             Double_t green[9] = { 38./255., 50./255., 76./255., 105./255., 140./255., 165./255., 191./255., 189./255., 167./255.};
             Double_t blue[9]  = { 55./255., 67./255., 97./255., 124./255., 140./255., 166./255., 163./255., 129./255.,  52./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2179,7 +2645,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255., 33./255., 73./255., 124./255., 136./255., 152./255., 159./255., 171./255., 223./255.};
             Double_t green[9] = { 0./255., 43./255., 92./255., 124./255., 134./255., 126./255., 121./255., 144./255., 223./255.};
             Double_t blue[9]  = { 0./255., 43./255., 68./255.,  76./255.,  73./255.,  64./255.,  72./255., 114./255., 223./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2189,7 +2655,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  5./255.,  18./255.,  45./255., 124./255., 193./255., 223./255., 205./255., 128./255., 49./255.};
             Double_t green[9] = { 48./255., 134./255., 207./255., 230./255., 193./255., 113./255.,  28./255.,   0./255.,  7./255.};
             Double_t blue[9]  = {  6./255.,  15./255.,  41./255., 121./255., 193./255., 226./255., 208./255., 130./255., 49./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2199,7 +2665,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 180./255., 106./255., 104./255., 135./255., 164./255., 188./255., 189./255., 165./255., 144./255.};
             Double_t green[9] = {  72./255., 126./255., 154./255., 184./255., 198./255., 207./255., 205./255., 190./255., 179./255.};
             Double_t blue[9]  = {  41./255., 120./255., 158./255., 188./255., 194./255., 181./255., 145./255., 100./255.,  62./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2209,7 +2675,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  57./255.,  72./255.,  94./255., 117./255., 136./255., 154./255., 174./255., 192./255., 215./255.};
             Double_t green[9] = {   0./255.,  33./255.,  68./255., 109./255., 140./255., 171./255., 192./255., 196./255., 209./255.};
             Double_t blue[9]  = { 116./255., 137./255., 173./255., 201./255., 200./255., 201./255., 203./255., 190./255., 187./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2219,7 +2685,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  31./255.,  71./255., 123./255., 160./255., 210./255., 222./255., 214./255., 199./255., 183./255.};
             Double_t green[9] = {  40./255., 117./255., 171./255., 211./255., 231./255., 220./255., 190./255., 132./255.,  65./255.};
             Double_t blue[9]  = { 234./255., 214./255., 228./255., 222./255., 210./255., 160./255., 105./255.,  60./255.,  34./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2229,7 +2695,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 123./255., 108./255., 109./255., 126./255., 154./255., 172./255., 188./255., 196./255., 218./255.};
             Double_t green[9] = { 184./255., 138./255., 130./255., 133./255., 154./255., 175./255., 188./255., 196./255., 218./255.};
             Double_t blue[9]  = { 208./255., 130./255., 109./255.,  99./255., 110./255., 122./255., 150./255., 171./255., 218./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2239,7 +2705,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 105./255., 106./255., 122./255., 143./255., 159./255., 172./255., 176./255., 181./255., 207./255.};
             Double_t green[9] = { 252./255., 197./255., 194./255., 187./255., 174./255., 162./255., 153./255., 136./255., 125./255.};
             Double_t blue[9]  = { 146./255., 133./255., 144./255., 155./255., 163./255., 167./255., 166./255., 162./255., 174./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2249,7 +2715,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 171./255., 141./255., 145./255., 152./255., 154./255., 159./255., 163./255., 158./255., 177./255.};
             Double_t green[9] = { 236./255., 143./255., 100./255.,  63./255.,  53./255.,  55./255.,  44./255.,  31./255.,   6./255.};
             Double_t blue[9]  = {  59./255.,  48./255.,  46./255.,  44./255.,  42./255.,  54./255.,  82./255., 112./255., 179./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2259,7 +2725,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 180./255., 190./255., 209./255., 223./255., 204./255., 228./255., 205./255., 152./255.,  91./255.};
             Double_t green[9] = {  93./255., 125./255., 147./255., 172./255., 181./255., 224./255., 233./255., 198./255., 158./255.};
             Double_t blue[9]  = { 236./255., 218./255., 160./255., 133./255., 114./255., 132./255., 162./255., 220./255., 218./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2269,7 +2735,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 225./255., 183./255., 162./255., 135./255., 115./255., 111./255., 119./255., 145./255., 211./255.};
             Double_t green[9] = { 205./255., 177./255., 166./255., 135./255., 124./255., 117./255., 117./255., 132./255., 172./255.};
             Double_t blue[9]  = { 186./255., 165./255., 155./255., 135./255., 126./255., 130./255., 150./255., 178./255., 226./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2279,7 +2745,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 39./255., 43./255., 59./255., 63./255., 80./255., 116./255., 153./255., 177./255., 223./255.};
             Double_t green[9] = { 39./255., 43./255., 59./255., 74./255., 91./255., 114./255., 139./255., 165./255., 223./255.};
             Double_t blue[9]  = { 39./255., 50./255., 59./255., 70./255., 85./255., 115./255., 151./255., 176./255., 223./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2289,7 +2755,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255., 38./255., 60./255., 76./255., 84./255., 89./255., 101./255., 128./255., 204./255.};
             Double_t green[9] = { 0./255., 10./255., 15./255., 23./255., 35./255., 57./255.,  83./255., 123./255., 199./255.};
             Double_t blue[9]  = { 0./255., 11./255., 22./255., 40./255., 63./255., 86./255.,  97./255.,  94./255.,  85./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2299,7 +2765,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 94./255., 112./255., 141./255., 165./255., 167./255., 140./255.,  91./255.,  49./255.,  27./255.};
             Double_t green[9] = { 27./255.,  46./255.,  88./255., 135./255., 166./255., 161./255., 135./255.,  97./255.,  58./255.};
             Double_t blue[9]  = { 42./255.,  52./255.,  81./255., 106./255., 139./255., 158./255., 155./255., 137./255., 116./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2309,7 +2775,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 30./255., 49./255., 79./255., 117./255., 135./255., 151./255., 146./255., 138./255., 147./255.};
             Double_t green[9] = { 63./255., 60./255., 72./255.,  90./255.,  94./255.,  94./255.,  68./255.,  46./255.,  16./255.};
             Double_t blue[9]  = { 18./255., 28./255., 41./255.,  56./255.,  62./255.,  63./255.,  50./255.,  36./255.,  21./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2319,7 +2785,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  0./255., 30./255., 63./255., 101./255., 143./255., 152./255., 169./255., 187./255., 230./255.};
             Double_t green[9] = {  0./255., 14./255., 28./255.,  42./255.,  58./255.,  61./255.,  67./255.,  74./255.,  91./255.};
             Double_t blue[9]  = { 39./255., 26./255., 21./255.,  18./255.,  15./255.,  14./255.,  14./255.,  13./255.,  13./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2329,7 +2795,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 149./255., 140./255., 164./255., 179./255., 182./255., 181./255., 131./255., 87./255., 61./255.};
             Double_t green[9] = {  62./255.,  70./255., 107./255., 136./255., 144./255., 138./255., 117./255., 87./255., 74./255.};
             Double_t blue[9]  = {  40./255.,  38./255.,  45./255.,  49./255.,  49./255.,  49./255.,  38./255., 32./255., 34./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2339,7 +2805,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 99./255., 112./255., 148./255., 165./255., 179./255., 182./255., 183./255., 183./255., 208./255.};
             Double_t green[9] = { 39./255.,  40./255.,  57./255.,  79./255., 104./255., 127./255., 148./255., 161./255., 198./255.};
             Double_t blue[9]  = { 15./255.,  16./255.,  18./255.,  33./255.,  51./255.,  79./255., 103./255., 129./255., 177./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2349,7 +2815,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 99./255., 116./255., 154./255., 174./255., 200./255., 196./255., 201./255., 201./255., 230./255.};
             Double_t green[9] = {  0./255.,   0./255.,   8./255.,  32./255.,  58./255.,  83./255., 119./255., 136./255., 173./255.};
             Double_t blue[9]  = {  5./255.,   6./255.,   7./255.,   9./255.,   9./255.,  14./255.,  17./255.,  19./255.,  24./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2359,7 +2825,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 82./255., 106./255., 126./255., 141./255., 155./255., 163./255., 142./255., 107./255.,  66./255.};
             Double_t green[9] = { 62./255.,  44./255.,  69./255., 107./255., 135./255., 152./255., 149./255., 132./255., 119./255.};
             Double_t blue[9]  = { 39./255.,  25./255.,  31./255.,  60./255.,  73./255.,  68./255.,  49./255.,  72./255., 188./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2369,7 +2835,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 18./255., 29./255., 44./255.,  72./255., 116./255., 158./255., 184./255., 208./255., 221./255.};
             Double_t green[9] = { 27./255., 46./255., 71./255., 105./255., 146./255., 177./255., 189./255., 190./255., 183./255.};
             Double_t blue[9]  = { 39./255., 55./255., 80./255., 108./255., 130./255., 133./255., 124./255., 100./255.,  76./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2379,7 +2845,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255., 48./255., 119./255., 173./255., 212./255., 224./255., 228./255., 228./255., 245./255.};
             Double_t green[9] = { 0./255., 13./255.,  30./255.,  47./255.,  79./255., 127./255., 167./255., 205./255., 245./255.};
             Double_t blue[9]  = { 0./255., 68./255.,  75./255.,  43./255.,  16./255.,  22./255.,  55./255., 128./255., 245./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2389,7 +2855,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  34./255.,  70./255., 129./255., 187./255., 225./255., 226./255., 216./255., 193./255., 179./255.};
             Double_t green[9] = {  48./255.,  91./255., 147./255., 194./255., 226./255., 229./255., 196./255., 110./255.,  12./255.};
             Double_t blue[9]  = { 234./255., 212./255., 216./255., 224./255., 206./255., 110./255.,  53./255.,  40./255.,  29./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2399,7 +2865,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  30./255.,  55./255., 103./255., 147./255., 174./255., 203./255., 188./255., 151./255., 105./255.};
             Double_t green[9] = {   0./255.,  65./255., 138./255., 182./255., 187./255., 175./255., 121./255.,  53./255.,   9./255.};
             Double_t blue[9]  = { 191./255., 202./255., 212./255., 208./255., 171./255., 140./255.,  97./255.,  57./255.,  30./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2409,7 +2875,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 112./255., 97./255., 113./255., 125./255., 138./255., 159./255., 178./255., 188./255., 225./255.};
             Double_t green[9] = {  16./255., 17./255.,  24./255.,  37./255.,  56./255.,  81./255., 110./255., 136./255., 189./255.};
             Double_t blue[9]  = {  38./255., 35./255.,  46./255.,  59./255.,  78./255., 103./255., 130./255., 152./255., 201./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2419,7 +2885,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 18./255.,  72./255.,   5./255.,  23./255.,  29./255., 201./255., 200./255., 98./255., 29./255.};
             Double_t green[9] = {  0./255.,   0./255.,  43./255., 167./255., 211./255., 117./255.,   0./255.,  0./255.,  0./255.};
             Double_t blue[9]  = { 51./255., 203./255., 177./255.,  26./255.,  10./255.,   9./255.,   8./255.,  3./255.,  0./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2429,7 +2895,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 19./255., 42./255., 64./255.,  88./255., 118./255., 147./255., 175./255., 187./255., 205./255.};
             Double_t green[9] = { 19./255., 55./255., 89./255., 125./255., 154./255., 169./255., 161./255., 129./255.,  70./255.};
             Double_t blue[9]  = { 19./255., 32./255., 47./255.,  70./255., 100./255., 128./255., 145./255., 130./255.,  75./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2439,7 +2905,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = {  33./255.,  31./255.,  42./255.,  68./255.,  86./255., 111./255., 141./255., 172./255., 227./255.};
             Double_t green[9] = { 255./255., 175./255., 145./255., 106./255.,  88./255.,  55./255.,  15./255.,   0./255.,   0./255.};
             Double_t blue[9]  = { 255./255., 205./255., 202./255., 203./255., 208./255., 205./255., 203./255., 206./255., 231./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2449,7 +2915,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255., 25./255., 50./255., 79./255., 110./255., 145./255., 181./255., 201./255., 254./255.};
             Double_t green[9] = { 0./255., 16./255., 30./255., 46./255.,  63./255.,  82./255., 101./255., 124./255., 179./255.};
             Double_t blue[9]  = { 0./255., 12./255., 21./255., 29./255.,  39./255.,  49./255.,  61./255.,  74./255., 103./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2459,7 +2925,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 0./255., 13./255.,  30./255.,  44./255.,  72./255., 120./255., 156./255., 200./255., 247./255.};
             Double_t green[9] = { 0./255., 36./255.,  84./255., 117./255., 141./255., 153./255., 151./255., 158./255., 247./255.};
             Double_t blue[9]  = { 0./255., 94./255., 100./255.,  82./255.,  56./255.,  66./255.,  76./255., 131./255., 247./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2469,7 +2935,7 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
             Double_t red[9]   = { 26./255., 51./255.,  43./255.,  33./255.,  28./255.,  35./255.,  74./255., 144./255., 246./255.};
             Double_t green[9] = {  9./255., 24./255.,  55./255.,  87./255., 118./255., 150./255., 180./255., 200./255., 222./255.};
             Double_t blue[9]  = { 30./255., 96./255., 112./255., 114./255., 112./255., 101./255.,  72./255.,  35./255.,   0./255.};
-            TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
+            Idx = TColor::CreateGradientColorTable(9, stops, red, green, blue, 255, alpha);
          }
          break;
 
@@ -2478,13 +2944,20 @@ void TColor::SetPalette(Int_t ncolors, Int_t *colors, Float_t alpha)
          return;
       }
       paletteType = ncolors;
+      if (Idx>0) fgPalettesList.fArray[paletteType-51] = (Double_t)Idx;
+      else       fgPalettesList.fArray[paletteType-51] = 0.;
+      if (alpha > 0.) fgPalettesList.fArray[paletteType-51] += alpha/10.;
       return;
    }
 
    // set user defined palette
-   fgPalette.Set(ncolors);
-   if (colors)  for (i=0;i<ncolors;i++) fgPalette.fArray[i] = colors[i];
-   else         for (i=0;i<ncolors;i++) fgPalette.fArray[i] = palette[i];
+   if (colors)  {
+      fgPalette.Set(ncolors);
+      for (i=0;i<ncolors;i++) fgPalette.fArray[i] = colors[i];
+   } else {
+      fgPalette.Set(TMath::Min(50,ncolors));
+      for (i=0;i<TMath::Min(50,ncolors);i++) fgPalette.fArray[i] = palette[i];
+   }
    paletteType = 3;
 }
 
