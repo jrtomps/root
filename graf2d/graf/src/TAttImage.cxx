@@ -681,7 +681,8 @@ void TAttImage::SetPalette(const TImagePalette *palette)
    }
 }
 
-
+////////////////////////////////////////////////////////////////////////////////
+/// Factory method to creates an image palette of a specific typ
 TImagePalette* TImagePalette::Create(Option_t* opts)
 {
    TImagePalette* pPalette = nullptr;
@@ -711,6 +712,8 @@ TImagePalette* TImagePalette::Create(Option_t* opts)
    return pPalette;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// Factory method to creates an image palette for histogram plotting
 TImagePalette* TImagePalette::CreateCOLPalette(Int_t ncontours)
 {
    Int_t ncolors  = gStyle->GetNumberOfColors();

@@ -916,7 +916,7 @@ is the color change between cells.
 
 The color palette in TStyle can be modified via `gStyle->SetPalette()`.
 
-All the none empty bins are painted. Empty bins are not painted unless
+All the non-empty bins are painted. Empty bins are not painted unless
 some bins have a negative content because in that case the null bins
 might be not empty.
 
@@ -1021,6 +1021,21 @@ Begin_Macro(source)
    return c1;
 }
 End_Macro
+
+A second rendering routine is also available with the COL2 or COLZ2 options.
+The performance comparison of the COL2 to the COL option depends on the
+histogram and the size of the rendering region in the current pad. In general,
+if the histogram is small and sparsely populated and there is no
+window forwarding through ssh, the COL option will almost always have
+better performance. That is not to say that the COL2 option is slow
+in the same situation. The real performance
+gains of COL2 become noticable compared to COL when the histogram is not sparse and contains 
+a large number of bins (e.g. 1000 x 1000 bins). For a 1000x1000 bin TH2 that is not sparse,
+ one can expect roughly an order
+of magnitude improvement to the COL option. 
+For the most part, these options are a drop in replacement to the COL 
+or COLZ options. In exchange for the performance gain, the user cedes the ability to leave
+bins without content uncolored.
 
 ### <a name="HP140"></a> The CANDLE option
 
@@ -4676,7 +4691,18 @@ void THistPainter::PaintViolinPlot(Option_t *)
    delete [] quantiles;
 }
 
-
+///////////////////////////////////////////////////////////////////////////////
+/// Returns the rendering regions for an axis to use in the COL2 option
+///
+/// The algorithm analyzes the size of the axis compared to the size of 
+/// the rendering region. It figures out the boundaries to use for each color
+/// of the rendering region. Only one axis is computed here.
+///
+/// This allows for a single computation of the boundaries before iterating
+/// through all of the bins. 
+/// \param pAxis     the axis to consider 
+/// \param nPixels   the number of pixels to render axis into
+/// \param isLog     whether the axis is log scale
 std::vector<THistRenderingRegion> 
 THistPainter::computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog)
 {
@@ -4780,15 +4806,14 @@ THistPainter::computeRenderingRegions(TAxis* pAxis, Int_t nPixels, bool isLog)
    return regions;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+/// [Rendering scheme for the COL2 and COLZ2 options] (#HP14)
 void THistPainter::PaintColorLevelsFast(Option_t*)
 {
-   /* Begin_html
-   [Control function to draw a 2D histogram as a color plot fast.](#HP14)
-   End_html */
 
    if (Hoption.System != kCARTESIAN) {
      Error("THistPainter::PaintColorLevelsFast(Option_t*)", 
-           "Only cartesian coordinates supported by 'COL1' option. Using 'COL' option instead.");
+           "Only cartesian coordinates supported by 'COL2' option. Using 'COL' option instead.");
      PaintColorLevels(nullptr);
      return;
    }

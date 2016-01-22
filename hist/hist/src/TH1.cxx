@@ -8093,14 +8093,17 @@ Int_t TH1::GetMinimumBin(Int_t &locmix, Int_t &locmiy, Int_t &locmiz) const
    return locm;
 }
 
-//______________________________________________________________________________
+////////////////////////////////////////////////////////////////////////////////
+/// 
+/// Updates the cached fMinimum, fMaximum, fMinimumBin, and fMaximumBin
+/// values. This sets all 4 values with 1 pass through all of the bins.
+/// This should allow for speedy performance on GetMinimum(), GetMaximum(),
+/// GetMinimumBin() and GetMaximumBin() operations. You can check to see
+/// if this need to be run by conditioning its call on TH1::MinOrMaxNeedsUpdate()
+///
+/// 
 void TH1::UpdateMinimumAndMaximum()
 {
-  // Updates the cached fMinimum, fMaximum, fMinimumBin, and fMaximumBin
-  // values. This sets all 4 values with 1 pass through all of the bins.
-  // This should allow for speedy performance on GetMinimum(), GetMaximum(),
-  // GetMinimumBin() and GetMaximumBin() operations. You can check to see
-  // if this need to be run by conditioning its call on TH1::MinOrMaxNeedsUpdate()
 
    Int_t bin, binx, biny, binz;
    Int_t xfirst  = fXaxis.GetFirst();
@@ -8131,6 +8134,9 @@ void TH1::UpdateMinimumAndMaximum()
    }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+/// Returns true if histogram has been updated since last call to 
+/// UpdateMinimumAndMaximum()
 Bool_t TH1::MinOrMaxNeedsUpdate() const
 {
   return (fMinimumBin == -1111) || (fMaximumBin == -1111) 

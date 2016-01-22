@@ -100,7 +100,39 @@ public:
 
    TImagePalette &operator=(const TImagePalette &palette);
 
+   /*! \brief Create a new palette 
+    * 
+    * This creates a new TImagePalette based on the 
+    * option specified in the parameter. The supported options are:
+    *
+    * "col"   - color palette similar in TStyle (i.e. use for "col" option)
+    * "web"   - color palette similar to gWebImagePalette
+    * "hist"  - color palette similar to gHistImagePalette
+    *
+    * \param opts   the type of palette to create
+    *
+    * Ownership of the returned object transfers to the caller.
+    *
+    * \retval new palette
+    * \retval nullptr - option does not exist
+    *
+    */
    static TImagePalette* Create(Option_t* opts);
+
+   /*! \brief Creates a "col" palette with correct number of contours
+    * 
+    * The behavior is similar to the TImagePalette::Create() method with
+    * the "col" option. The difference here is that the palette will only
+    * contain a specific number of colors. This method is used to create
+    * the palette used in the "col2" and "colz2" options. It handles the 
+    * color selection for contours.
+    *
+    * \param opts   the type of palette to create
+    *
+    * Ownership of the returned object transfers to the caller.
+    *
+    * \return new palette 
+    */
    static TImagePalette* CreateCOLPalette(Int_t nContours);
 
    ClassDef(TImagePalette,2)  // Color Palette for value -> color conversion
